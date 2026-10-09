@@ -1,0 +1,155 @@
+<script>
+/* ── Ledger Import — Admin ── */
+var IMP_ROWS = [];
+
+function impMsg(err, ok) {
+  var e = document.getElementById('imp-err'), o = document.getElementById('imp-ok');
+  if (e) { e.style.display = err ? 'block' : 'none'; e.textContent = err || ''; }
+  if (o) { o.style.display = ok ? 'block' : 'none'; o.textContent = ok || ''; }
+}
+
+function impParseCSV(text) {
+  // Minimal CSV parser handling quoted fields
+  var rows = [], row = [], val = '', q = false;
+  for (var i = 0; i < text.length; i++) {
+    var c = text[i], n = text[i + 1];
+    if (q) {
+      if (c === '"' && n === '"') { val += '"'; i++; }
+      else if (c === '"') { q = false; }
+      else { val += c; }
+    } else {
+      if (c === '"') { q = true; }
+      else if (c === ',') { row.push(val); val = ''; }
+      else if (c === '\n') { row.push(val); rows.push(row); row = []; val = ''; }
+      else if (c === '\r') { /* skip */ }
+      else { val += c; }
+    }
+  }
+  if (val !== '' || row.length) { row.push(val); rows.push(row); }
+  return rows.filter(function(r) { return r.some(function(v) { return String(v).trim() !== ''; }); });
+}
+
+function impNormalize(table) {
+  // Accepts A-O header (LoanID,MemberID,Member Name,Amount,...) or review header (TempID,...)
+  var header = table[0].map(function(h) { return String(h).trim().toLowerCase(); });
+  var idx = function() {
+    for (var k = 0; k < arguments.length; k++) {
+      var i = header.indexOf(arguments[k]);
+      if (i !== -1) return i;
+    }
+    return -1;
+  };
+  var iId = idx('memberid', 'tempid'), iName = idx('member name', 'membername', 'account name'),
+      iAmt = idx('amount', 'loanamount'), iTerm = idx('term (months)', 'term'),
+      iRel = idx('date released', 'datereleased', 'dateapproved'),
+      iMat = idx('maturity date', 'maturitydate', 'maturity'),
+      iBal = idx('balance', 'lastbalance_sched'), iStat = idx('status', 'statusguess');
+  if (iId < 0 || iAmt < 0) return { error: 'Header not recognized. Use STAGING-LOANS-A-O.csv (LoanID,MemberID,Member Name,Amount,...).' };
+  var rows = [];
+  for (var r = 1; r < table.length; r++) {
+    var t = table[r];
+    var amt = Number(String(t[iAmt] || '').replace(/[₱, ]/g, '')) || 0;
+    var term = parseInt(String(t[iTerm] || '').replace(/\D/g, ''), 10) || 0;
+    if (!t[iId] || !amt || !term) continue;
+    rows.push({
+      memberId: String(t[iId]).trim(),
+      memberName: String(iName >= 0 ? (t[iName] || '') : '').trim(),
+      amount: amt, term: term,
+      dateReleased: String(iRel >= 0 ? (t[iRel] || '') : '').trim(),
+      maturityDate: String(iMat >= 0 ? (t[iMat] || '') : '').trim(),
+      balance: iBal >= 0 ? (Number(String(t[iBal]).replace(/[₱, ]/g, '')) || 0) : amt,
+      status: String(iStat >= 0 ? (t[iStat] || '') : '').trim() || 'Active'
+    });
+    if (rows.length >= 200) break;
+  }
+  return { rows: rows };
+}
+
+function impRender(rows) {
+  var tb = document.getElementById('imp-tbody');
+  var btn = document.getElementById('imp-save-btn');
+  var sum = document.getElementById('imp-summary');
+  if (!rows.length) {
+    tb.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#888;padding:20px;">No valid rows.</td></tr>';
+    btn.disabled = true; btn.textContent = 'Save to Sheets (0)';
+    return;
+  }
+  var html = '';
+  rows.forEach(function(r, i) {
+    var pmt = r.term ? Math.round((r.amount * 0.01 / (1 - Math.pow(1.01, -r.term)))) : 0;
+    var chk = [];
+    if (!r.memberId) chk.push('no ID');
+    if (!r.amount || !r.term) chk.push('bad amt/term');
+    if (r.balance > r.amount) chk.push('bal>amt');
+    if (!r.dateReleased) chk.push('no date');
+    html += '<tr><td>' + (i + 1) + '</td><td>' + r.memberId + '</td><td>' + r.memberName + '</td>'
+      + '<td>' + r.amount.toLocaleString() + '</td><td>' + r.term + '</td><td>' + pmt.toLocaleString() + '</td>'
+      + '<td>' + r.dateReleased + '</td><td>' + Number(r.balance).toLocaleString() + '</td><td>' + r.status + '</td>'
+      + '<td style="color:' + (chk.length ? '#A32D2D' : '#3B6D11') + '">' + (chk.join(', ') || 'ok') + '</td></tr>';
+  });
+  tb.innerHTML = html;
+  btn.disabled = false; btn.textContent = 'Save to Sheets (' + rows.length + ')';
+  var nActive = rows.filter(function(r) { return String(r.status).toLowerCase() !== 'paid'; }).length;
+  sum.textContent = rows.length + ' rows parsed (' + nActive + ' active). Monthly shown = recomputed PMT 1%.';
+}
+
+function previewImportFile() {
+  impMsg('', '');
+  var f = document.getElementById('imp-file').files[0];
+  var pasted = (document.getElementById('imp-paste').value || '').trim();
+  var activeOnly = document.getElementById('imp-active-only').checked;
+  var done = function(table) {
+    var norm = impNormalize(table);
+    if (norm.error) { impMsg(norm.error, ''); return; }
+    var rows = norm.rows;
+    if (activeOnly) rows = rows.filter(function(r) { return String(r.status).toLowerCase() !== 'paid'; });
+    IMP_ROWS = rows;
+    impRender(rows);
+    if (!rows.length) impMsg('No rows after filter. Uncheck "Active only" to include Paid history.', '');
+  };
+  if (f) {
+    var rd = new FileReader();
+    rd.onload = function(e) {
+      try {
+        if (/\.csv$/i.test(f.name) || f.type.indexOf('csv') !== -1) {
+          done(impParseCSV(e.target.result));
+        } else {
+          var data = new Uint8Array(e.target.result);
+          var wb = XLSX.read(data, { type: 'array' });
+          var ws = wb.Sheets[wb.SheetNames[0]];
+          done(XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }));
+        }
+      } catch (err) { impMsg('Parse error: ' + err.message, ''); }
+    };
+    if (/\.csv$/i.test(f.name)) rd.readAsText(f);
+    else rd.readAsArrayBuffer(f);
+  } else if (pasted) {
+    done(impParseCSV(pasted));
+  } else {
+    impMsg('Choose a .csv/.xlsx file or paste CSV text first.', '');
+  }
+}
+
+function saveImportBatch() {
+  if (!IMP_ROWS.length) return;
+  if (!confirm('Save ' + IMP_ROWS.length + ' loans to Loans + REGULAR sheets?\nBackup your Sheet first. Duplicates skipped if checked.')) return;
+  var btn = document.getElementById('imp-save-btn');
+  btn.disabled = true; btn.textContent = 'Saving...';
+  var skipExisting = document.getElementById('imp-skip-existing').checked;
+  google.script.run
+    .withSuccessHandler(function(r) {
+      btn.disabled = false; btn.textContent = 'Save to Sheets (' + IMP_ROWS.length + ')';
+      if (r && r.success) {
+        impMsg('', 'Saved ' + r.imported + ', skipped ' + r.skipped + (r.errors.length ? '. Errors: ' + r.errors.slice(0, 3).join('; ') : ''));
+        if (typeof loadRegLoans === 'function') loadRegLoans();
+      } else { impMsg('Save failed: ' + ((r && r.message) || 'unknown'), ''); }
+    })
+    .withFailureHandler(function(e) {
+      btn.disabled = false; btn.textContent = 'Save to Sheets (' + IMP_ROWS.length + ')';
+      impMsg('Server error: ' + e.message, '');
+    })
+    .bulkImportLedgerLoans(IMP_ROWS, { skipExisting: skipExisting });
+}
+
+function loadImportPage() { impMsg('', ''); }
+</script>

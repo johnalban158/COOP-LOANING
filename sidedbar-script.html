@@ -33,11 +33,11 @@ function navigate(page) {
   // Role-based access control
   var role = localStorage.getItem('campuscoop_role') || 'admin';
   var restrictedPages = {
-    'chairperson': ['applications', 'shortterm', 'regular', 'commodity', 'treasurer', 'deductions', 'officer', 'payments', 'collections', 'overdue', 'officers', 'sms', 'settings', 'reports'],
-    'regular': ['shortterm', 'commodity', 'treasurer', 'deductions', 'officer', 'officers', 'sms', 'settings', 'reports'],
-    'shortterm': ['regular', 'treasurer', 'deductions', 'officer', 'officers', 'sms', 'settings', 'reports'],
-    'commodity': ['regular', 'treasurer', 'deductions', 'officer', 'officers', 'sms', 'settings', 'reports'],
-    'treasurer': ['applications', 'shortterm', 'regular', 'commodity', 'deductions', 'officer', 'officers', 'sms', 'settings', 'reports']
+    'chairperson': ['applications', 'shortterm', 'regular', 'commodity', 'treasurer', 'deductions', 'officer', 'payments', 'collections', 'overdue', 'officers', 'sms', 'settings', 'reports', 'import'],
+    'regular': ['shortterm', 'commodity', 'treasurer', 'deductions', 'officer', 'officers', 'sms', 'settings', 'reports', 'import'],
+    'shortterm': ['regular', 'treasurer', 'deductions', 'officer', 'officers', 'sms', 'settings', 'reports', 'import'],
+    'commodity': ['regular', 'treasurer', 'deductions', 'officer', 'officers', 'sms', 'settings', 'reports', 'import'],
+    'treasurer': ['applications', 'shortterm', 'regular', 'commodity', 'deductions', 'officer', 'officers', 'sms', 'settings', 'reports', 'import']
   };
   
   if (restrictedPages[role] && restrictedPages[role].indexOf(page) !== -1) {
@@ -111,6 +111,10 @@ function navigate(page) {
   if (page === 'treasurer' && typeof loadReleases === 'function') {
     loadReleases();
   }
+  // Auto-load import page
+  if (page === 'import' && typeof loadImportPage === 'function') {
+    loadImportPage();
+  }
   // Auto-load officer borrower ledgers when navigating to it
   if (page === 'officer' && typeof loadOfficerData === 'function') {
     loadOfficerData();
@@ -162,7 +166,7 @@ function filterSidebarForRole() {
   var stlComHideIds = ['nav-regular', 'nav-treasurer', 'nav-deductions', 'nav-officer'];
   
   // Elements to hide for all officers (non-admin)
-  var officerHideIds = ['nav-settings', 'nav-sms', 'nav-officers', 'nav-reports'];
+  var officerHideIds = ['nav-settings', 'nav-sms', 'nav-officers', 'nav-reports', 'nav-import'];
   
   var hideIds = [];
   

@@ -19,6 +19,7 @@
     <?!= include('reports-style') ?>
     <?!= include('treasurer-style') ?>
     <?!= include('officer-style') ?>
+    <?!= include('import-style') ?>
     <style>
 /* ── SPA layout ── */
 .page{display:none;flex:1;flex-direction:column;overflow:hidden;}
@@ -1690,6 +1691,8 @@
           <?!= include('officer-web') ?>
         </div>
 
+        <?!= include('import-web') ?>
+
         <?!= include('deductions-script') ?>
     <?!= include('treasurer-script') ?>
     <?!= include('reports-web') ?>
@@ -1848,6 +1851,7 @@
     <?!= include('sms-script') ?>
     <?!= include('analytics-script') ?>
     <?!= include('reports-script') ?>
+    <?!= include('import-script') ?>
 
     <div class="modal-overlay" id="cl-modal"
       onclick="if(event.target===this)closeModal('cl-modal')">
@@ -2079,5 +2083,6 @@
     <?!= include('sms-script') ?>
     <?!= include('analytics-script') ?>
     <?!= include('reports-script') ?>
+    <?!= include('import-script') ?>
   </body>
 </html>
