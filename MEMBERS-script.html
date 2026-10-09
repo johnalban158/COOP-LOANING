@@ -92,8 +92,8 @@
       var currentRole = localStorage.getItem('campuscoop_role') || '';
       var isChairperson = currentRole === 'chairperson' || currentRole === 'masteradmin' || currentRole === 'admin';
       var roleBtn = m.role === 'Officer'
-        ? '<button class="action-btn reject" onclick=\'confirmRoleChange(' + JSON.stringify(m).replace(/'/g, ''') + ', "Member")\'>&#8635; Revoke Officer</button>'
-        : (isChairperson ? '<button class="action-btn approve" onclick=\'confirmRoleChange(' + JSON.stringify(m).replace(/'/g, ''') + ', "Officer")\'>&#11088; Promote to Officer</button>' : '');
+        ? '<button class="action-btn reject" onclick=\'confirmRoleChange(' + JSON.stringify(m).replace(/'/g, "") + ', "Member")\'>&#8635; Revoke Officer</button>'
+        : (isChairperson ? '<button class="action-btn approve" onclick=\'confirmRoleChange(' + JSON.stringify(m).replace(/'/g, "") + ', "Officer")\'>&#11088; Promote to Officer</button>' : '');
 
       html += '<tr>';
       html += '<td><div style="font-weight:600;font-size:13px;">' + fullName + '</div><div style="font-size:11px;color:#888;">' + m.username + ' &middot; ' + m.email + '</div></td>';
@@ -103,7 +103,7 @@
       html += '<td style="font-size:12px;color:#185FA5;">' + maxElig + '</td>';
       html += '<td>' + statusBadge + '</td>';
       html += '<td style="font-size:12px;">' + (m.dateJoined || '&mdash;') + '</td>';
-      html += '<td><button class="action-btn" onclick=\'viewMember(' + JSON.stringify(m).replace(/'/g, ''') + ')\'>View</button>' + roleBtn + '</td>';
+      html += '<td><button class="action-btn" onclick=\'viewMember(' + JSON.stringify(m).replace(/'/g, "") + ')\'>View</button>' + roleBtn + '</td>';
       html += '</tr>';
     });
     tbody.innerHTML = html;
@@ -154,10 +154,10 @@
       + '<div class="detail-item"><div class="detail-label">Max Loanable</div><div class="detail-val" style="color:#185FA5;font-weight:600;">' + maxAmt + '</div></div>'
       + '</div>'
       + '<div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">'
-      + '<button class="action-btn approve" onclick=\'sendMemberReset(' + JSON.stringify(m).replace(/'/g, ''') + ')\'>&#128231; Send password reset link</button>'
+      + '<button class="action-btn approve" onclick=\'sendMemberReset(' + JSON.stringify(m).replace(/'/g, "") + ')\'>&#128231; Send password reset link</button>'
       + (m.role === 'Officer'
-        ? '<button class="action-btn reject" onclick=\'confirmRoleChange(' + JSON.stringify(m).replace(/'/g, ''') + ', "Member")\'>&#8635; Revoke Officer</button>'
-        : (isChairperson ? '<button class="action-btn approve" onclick=\'confirmRoleChange(' + JSON.stringify(m).replace(/'/g, ''') + ', "Officer")\'>&#11088; Promote to Officer</button>' : ''))
+        ? '<button class="action-btn reject" onclick=\'confirmRoleChange(' + JSON.stringify(m).replace(/'/g, "") + ', "Member")\'>&#8635; Revoke Officer</button>'
+        : (isChairperson ? '<button class="action-btn approve" onclick=\'confirmRoleChange(' + JSON.stringify(m).replace(/'/g, "") + ', "Officer")\'>&#11088; Promote to Officer</button>' : ''))
       + '</div>'
       + '<div class="modal-actions">'
       + '<button class="btn-close-modal" onclick="closeModal(\'mem-modal\')">Close</button>'
@@ -281,7 +281,7 @@
       .updateMemberByAdmin(m.username, data);
   }
 
-  function escHtml(s) { return String(s || '').replace(/&/g,'&').replace(/</g,'<').replace(/>/g,'>').replace(/"/g,'"').replace(/'/g,'''); }
+  function escHtml(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
   document.addEventListener('DOMContentLoaded', function() {
     loadMembers();

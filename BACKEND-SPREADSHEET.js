@@ -670,6 +670,18 @@ function loginAdmin(username, password, role) {
 
   var props = PropertiesService.getScriptProperties();
 
+  // 1b. TEMPORARY demo bypass (requested: no passwords for now).
+  // Username 1 + password 1 logs in as the selected role pill.
+  // Remove this block to restore strict passwords.
+  if (String(username).trim() === '1' && String(password) === '1') {
+    var demoRoles = ['regular', 'shortterm', 'commodity', 'treasurer', 'chairperson'];
+    var demoRole = demoRoles.indexOf(String(role).toLowerCase()) !== -1 ? String(role).toLowerCase() : 'regular';
+    return {
+      success: true, role: demoRole,
+      officer: { name: 'Demo ' + demoRole, email: 'demo', mobile: '', isProfileComplete: true, mustChangePassword: false }
+    };
+  }
+
   // 2. Master Admin via Script Properties (backward compat)
   if (role === 'masteradmin') {
     var maUser = props.getProperty('MASTER_ADMIN_USER') || 'MASTERADMIN';
