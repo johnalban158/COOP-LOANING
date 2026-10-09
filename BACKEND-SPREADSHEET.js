@@ -712,9 +712,12 @@ function loginAdmin(username, password, role) {
   }
 
   var inputEmail = String(username).trim().toLowerCase();
+  var demoNoPw = false;
+  try { demoNoPw = PropertiesService.getScriptProperties().getProperty('DEMO_NO_PASSWORD') === 'TRUE'; } catch (e) {}
   for (var i = 0; i < officers.length; i++) {
     var o = officers[i];
-    if (o.email === inputEmail && o.password === password) {
+    var pwOk = demoNoPw ? true : (o.password === password);
+    if (o.email === inputEmail && pwOk) {
       if (o.status !== 'active') {
         return { success: false, message: 'This account has been deactivated. Contact the Master Admin.' };
       }
@@ -829,6 +832,24 @@ function completeOfficerProfileSetup(data) {
   } catch (e) { return { success: false, message: e.message }; }
 }
 
+// ── Officer login helpers: cache clear + temporary no-password demo mode ──
+// Run setDemoNoPassword(true) in Apps Script editor to skip password check.
+// Run setDemoNoPassword(false) to restore. Does NOT delete stored passwords.
+function clearOfficerLoginCache() {
+  try {
+    CacheService.getScriptCache().removeAll(['officer_accounts', 'login_officers_data', 'officer_credentials']);
+    return { success: true, message: 'Officer login cache cleared. New sheet passwords take effect now.' };
+  } catch (e) { return { success: false, message: e.message }; }
+}
+
+function setDemoNoPassword(enabled) {
+  try {
+    PropertiesService.getScriptProperties().setProperty('DEMO_NO_PASSWORD', enabled ? 'TRUE' : 'FALSE');
+    clearOfficerLoginCache();
+    return { success: true, demoNoPassword: !!enabled };
+  } catch (e) { return { success: false, message: e.message }; }
+}
+
 // ═══════════════════════════════════════════
 // Officers Sheet — individual accounts managed by Master Admin
 // ═══════════════════════════════════════════
@@ -886,7 +907,7 @@ function createOfficerAccount(data) {
     var now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
     sheet.appendRow([email, password, role, fullname, mobile, 'Active', 'ICMADMIN', now, schoolYear, '', 'YES']);
 
-    try { CacheService.getScriptCache().removeAll(['officer_accounts']); } catch(e) {}
+    try { CacheService.getScriptCache().removeAll(['officer_accounts', 'login_officers_data']); } catch(e) {}
 
     // Send email notification with credentials
     try {
@@ -996,7 +1017,7 @@ function updateOfficerAccount(email, data) {
     if (data.mobile !== undefined) sheet.getRange(targetRow, 5).setValue(String(data.mobile));
     if (data.status) sheet.getRange(targetRow, 6).setValue(String(data.status));
 
-    try { CacheService.getScriptCache().removeAll(['officer_accounts']); } catch(e) {}
+    try { CacheService.getScriptCache().removeAll(['officer_accounts', 'login_officers_data']); } catch(e) {}
 
     return { success: true };
   } catch (e) {

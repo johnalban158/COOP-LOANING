@@ -149,8 +149,8 @@ function doOfficerLogin() {
   var btn  = document.getElementById('officer-btn');
 
   if (err) err.style.display = 'none';
-  if (!user || !pw) {
-    if (err) { err.textContent = 'Please enter username and password.'; err.style.display = 'block'; }
+  if (!user) {
+    if (err) { err.textContent = 'Please enter username.'; err.style.display = 'block'; }
     return;
   }
 
