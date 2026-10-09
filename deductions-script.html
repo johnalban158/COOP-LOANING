@@ -1,0 +1,126 @@
+<script>
+/* ── Deductions Page Logic ── */
+var _dedRolePanel = {
+  regular:   'reg',
+  shortterm: 'stl',
+  commodity: 'com'
+};
+
+function _scopeDeductionsToRole() {
+  var role = 'admin';
+  try { role = localStorage.getItem('campuscoop_role') || 'admin'; } catch(e) {}
+  var own = _dedRolePanel[role];
+  if (!own) return; // admin / masteradmin / treasurer / chairperson keep full view
+
+  // Officers edit their own loan type panel only
+  var panels = document.querySelectorAll('#page-deductions [data-role]');
+  panels.forEach(function(p) {
+    p.style.display = p.getAttribute('data-role') === own ? '' : 'none';
+  });
+
+  // CBU loan-limit settings stay with the master admin
+  var cbuCard = document.getElementById('ded-cbu-card');
+  if (cbuCard) cbuCard.style.display = 'none';
+
+  var topSub = document.querySelector('#page-deductions .topbar-sub');
+  var labels = { reg: 'Regular', stl: 'Short Term', com: 'Commodity' };
+  if (topSub) topSub.textContent = 'Manage deduction settings and fees for ' + labels[own] + ' loans';
+}
+
+function initDeductionsPage() {
+  _scopeDeductionsToRole();
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!r || !r.success) return;
+      var el = function(id) { return document.getElementById(id); };
+      
+      // Load CBU Pct
+      if (el('ded-cbu-reg-pct')) el('ded-cbu-reg-pct').value = r.regCbuPct || 300;
+      if (el('ded-cbu-st-pct'))  el('ded-cbu-st-pct').value  = r.stCbuPct  || 80;
+      if (el('ded-cbu-com-pct')) el('ded-cbu-com-pct').value = r.comCbuPct || 80;
+
+      // Load Deductions Defaults
+      if (el('pded-reg-cbu'))       el('pded-reg-cbu').value       = r.regCbuRate || 2;
+      if (el('pded-reg-service'))   el('pded-reg-service').value   = r.regService || 0;
+      if (el('pded-reg-insurance')) el('pded-reg-insurance').value = r.regInsurancePct !== undefined ? r.regInsurancePct : 1.62;
+      if (el('pded-reg-notarial'))  el('pded-reg-notarial').value  = r.regNotarial || 0;
+      if (el('pded-stl-cbu'))       el('pded-stl-cbu').value       = r.stlCbuRate || 1;
+      if (el('pded-stl-service'))   el('pded-stl-service').value   = r.stlService || 0;
+      if (el('pded-stl-insurance')) el('pded-stl-insurance').value = r.stlInsurancePct !== undefined ? r.stlInsurancePct : 1.62;
+      if (el('pded-com-cbu'))       el('pded-com-cbu').value       = r.comCbuRate || 1;
+      if (el('pded-com-service'))   el('pded-com-service').value = r.comService || 0;
+      
+      // Toggle states
+      if (el('pded-reg-on')) { el('pded-reg-on').checked = r.regOn !== false; togglePageDedPanel('reg'); }
+      if (el('pded-stl-on')) { el('pded-stl-on').checked = r.stlOn !== false; togglePageDedPanel('stl'); }
+      if (el('pded-com-on')) { el('pded-com-on').checked = r.comOn !== false; togglePageDedPanel('com'); }
+    })
+    .withFailureHandler(function(){})
+    .getDeductionSettings();
+}
+
+function togglePageDedPanel(type) {
+  var cb = document.getElementById('pded-' + type + '-on');
+  var panel = document.getElementById('pded-' + type + '-panel');
+  var dot = document.getElementById('pded-' + type + '-dot');
+  if (!cb || !panel || !dot) return;
+  var isOn = cb.checked;
+  if (dot) {
+    dot.style.left = isOn ? '22px' : '2px';
+  }
+  if (panel) {
+    panel.style.opacity = isOn ? '1' : '0.5';
+    panel.style.pointerEvents = isOn ? 'auto' : 'none';
+  }
+}
+
+function savePageDeductionSettings() {
+  var data = {
+    regOn:        document.getElementById('pded-reg-on').checked,
+    stlOn:        document.getElementById('pded-stl-on').checked,
+    comOn:        document.getElementById('pded-com-on').checked,
+    regCbuRate:   Number(document.getElementById('pded-reg-cbu').value) || 2,
+    regService:   Number(document.getElementById('pded-reg-service').value) || 0,
+    regInsurancePct: Number(document.getElementById('pded-reg-insurance').value) || 0,
+    regNotarial:  Number(document.getElementById('pded-reg-notarial').value) || 0,
+    stlCbuRate:   Number(document.getElementById('pded-stl-cbu').value) || 1,
+    stlService:   Number(document.getElementById('pded-stl-service').value) || 0,
+    stlInsurancePct: Number(document.getElementById('pded-stl-insurance').value) || 0,
+    comCbuRate:   Number(document.getElementById('pded-com-cbu').value) || 1,
+    comService:   Number(document.getElementById('pded-com-service').value) || 0
+  };
+
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r && r.success) {
+        var ok = document.getElementById('pded-save-ok');
+        if (ok) { ok.style.display = 'inline'; setTimeout(function(){ ok.style.display='none'; }, 3000); }
+        showToast('\u2713 Deduction settings saved!');
+      } else {
+        showToast('\u274C Error: ' + (r && r.message || 'Failed'));
+      }
+    })
+    .withFailureHandler(function(e) { showToast('Error: ' + e.message); })
+    .saveDeductionSettings(data);
+}
+
+function saveCbuPctSettings() {
+  var data = {
+    regCbuPct: Number(document.getElementById('ded-cbu-reg-pct').value) || 300,
+    stCbuPct:  Number(document.getElementById('ded-cbu-st-pct').value) || 80,
+    comCbuPct: Number(document.getElementById('ded-cbu-com-pct').value) || 80
+  };
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r && r.success) {
+        var ok = document.getElementById('cbu-pct-save-ok');
+        if (ok) { ok.style.display = 'inline'; setTimeout(function(){ ok.style.display='none'; }, 3000); }
+        showToast('\u2713 CBU percentage settings saved!');
+      } else {
+        showToast('\u274C Error: ' + (r && r.message || 'Failed'));
+      }
+    })
+    .withFailureHandler(function(e) { showToast('Error: ' + e.message); })
+    .saveCbuSettings(data);
+}
+</script>

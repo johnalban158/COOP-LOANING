@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <script>window.SCRIPT_URL='<?= scriptUrl ?>';</script>
+    <?!= include('LOAN-APP-style') ?>
+  </head>
+  <body>
+    <div class="shell">
+      <?!= include('sidebar') ?>
+      <?!= include('sidedbar-script') ?>
+      <div class="main" id="page-applications">
+        <div class="topbar">
+          <div>
+            <div class="topbar-title">
+              Loan Applications
+            </div>
+            <div class="topbar-sub">
+              AY 2025-2026 &middot;
+              Review and process requests
+            </div>
+          </div>
+          <div class="topbar-right">
+            <button class="btn-back"
+              onclick="navigate(
+              'dashboard')">
+              &larr; Dashboard
+            </button>
+            <button class="btn-primary">
+              + New Application
+            </button>
+          </div>
+        </div>
+        <div class="content">
+
+          <div class="cards-row">
+            <div class="card bl1">
+              <div class="card-label">
+                Pending
+              </div>
+              <div class="card-val">
+                &mdash;
+              </div>
+              <div class="card-sub">
+                Awaiting review
+              </div>
+            </div>
+            <div class="card bl2">
+              <div class="card-label">
+                Approved
+              </div>
+              <div class="card-val">
+                &mdash;
+              </div>
+              <div class="card-sub">
+                This school year
+              </div>
+            </div>
+            <div class="card bl3">
+              <div class="card-label">
+                Rejected
+              </div>
+              <div class="card-val">
+                &mdash;
+              </div>
+              <div class="card-sub">
+                This school year
+              </div>
+            </div>
+            <div class="card bl4">
+              <div class="card-label">
+                Total
+              </div>
+              <div class="card-val">
+                &mdash;
+              </div>
+              <div class="card-sub">
+                All applications
+              </div>
+            </div>
+          </div>
+
+          <div class="filter-row">
+            <span class="filter-label">
+              Filter:
+            </span>
+            <button class="filter-btn on"
+              onclick="setFilterApp(
+              this,'all')">
+              All
+            </button>
+            <button class="filter-btn
+              f-pending"
+              onclick="setFilterApp(
+              this,'pending')">
+              Pending
+            </button>
+            <button class="filter-btn
+              f-approved"
+              onclick="setFilterApp(
+              this,'approved')">
+              Approved
+            </button>
+            <button class="filter-btn
+              f-rejected"
+              onclick="setFilterApp(
+              this,'rejected')">
+              Rejected
+            </button>
+            <div style="margin-left:auto;display:flex;gap:8px;">
+              <button class="btn-primary" onclick="bulkApprove()" style="padding:8px 16px;font-size:12px;">
+                &#10003; Approve Selected
+              </button>
+              <button class="btn-back" onclick="bulkReject()" style="padding:8px 16px;font-size:12px;background:#A32D2D;color:#fff;border:none;">
+                &#10005; Reject Selected
+              </button>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:40px;"><input type="checkbox" id="select-all-apps" onclick="toggleSelectAll()"></th>
+                  <th>Applicant</th>
+                  <th>Type</th>
+                  <th>Loan</th>
+                  <th>Amount</th>
+                  <th>Months</th>
+                  <th>Date Filed</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="app-table">
+                <tr onclick="viewApp(0)" style="cursor:pointer;">
+                  <td><span class="name-link">Macaraeg, Fe T.</span><div class="sub-cell">TCH-003 &middot; APP-001</div></td>
+                  <td><span class="pill p-t">Teacher</span></td>
+                  <td><span class="pill p-reg">Regular</span></td>
+                  <td class="mono">&#8369;120,000</td>
+                  <td>24 mo.</td>
+                  <td>Mar 10, 2025</td>
+                  <td><span class="pill p-pending">Pending</span></td>
+                </tr>
+                <tr onclick="viewApp(1)" style="cursor:pointer;">
+                  <td><span class="name-link">Santos, Maria L.</span><div class="sub-cell">TCH-007 &middot; APP-002</div></td>
+                  <td><span class="pill p-t">Teacher</span></td>
+                  <td><span class="pill p-stl">Short Term</span></td>
+                  <td class="mono">&#8369;15,000</td>
+                  <td>6 mo.</td>
+                  <td>Mar 12, 2025</td>
+                  <td><span class="pill p-pending">Pending</span></td>
+                </tr>
+                <tr onclick="viewApp(2)" style="cursor:pointer;">
+                  <td><span class="name-link">Reyes, Lorna D.</span><div class="sub-cell">TCH-001 &middot; APP-003</div></td>
+                  <td><span class="pill p-t">Teacher</span></td>
+                  <td><span class="pill p-reg">Regular</span></td>
+                  <td class="mono">&#8369;80,000</td>
+                  <td>36 mo.</td>
+                  <td>Mar 14, 2025</td>
+                  <td><span class="pill p-approved">Approved</span></td>
+                </tr>
+                <tr onclick="viewApp(3)" style="cursor:pointer;">
+                  <td><span class="name-link">Cruz, Ana M.</span><div class="sub-cell">JO-002 &middot; APP-004</div></td>
+                  <td><span class="pill p-jo">Job Order</span></td>
+                  <td><span class="pill p-stl">Short Term</span></td>
+                  <td class="mono">&#8369;10,000</td>
+                  <td>4 mo.</td>
+                  <td>Mar 15, 2025</td>
+                  <td><span class="pill p-pending">Pending</span></td>
+                </tr>
+                <tr onclick="viewApp(4)" style="cursor:pointer;">
+                  <td><span class="name-link">Gomez, Bert L.</span><div class="sub-cell">JO-011 &middot; APP-005</div></td>
+                  <td><span class="pill p-jo">Job Order</span></td>
+                  <td><span class="pill p-stl">Short Term</span></td>
+                  <td class="mono">&#8369;8,000</td>
+                  <td>3 mo.</td>
+                  <td>Mar 18, 2025</td>
+                  <td><span class="pill p-rejected">Rejected</span></td>
+                </tr>
+                <tr onclick="viewApp(5)" style="cursor:pointer;">
+                  <td><span class="name-link">Dela Cruz, Joy R.</span><div class="sub-cell">TCH-015 &middot; APP-006</div></td>
+                  <td><span class="pill p-t">Teacher</span></td>
+                  <td><span class="pill p-reg">Regular</span></td>
+                  <td class="mono">&#8369;50,000</td>
+                  <td>24 mo.</td>
+                  <td>Feb 20, 2025</td>
+                  <td><span class="pill p-approved">Approved</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="app-modal" onclick="if(event.target===this)closeModal('app-modal')">
+      <div class="modal">
+        <div class="modal-header">
+          <div>
+            <div class="modal-title" id="modal-title">Application Details</div>
+            <div class="md-sub" id="modal-sub"></div>
+          </div>
+          <span class="modal-close" onclick="closeModal()">&times;</span>
+        </div>
+        <div class="modal-body" id="modal-body"></div>
+      </div>
+    </div>
+
+    <!-- ── Rejection Reason Modal ── -->
+    <div class="modal-overlay" id="reject-ov" style="display:none" onclick="if(event.target===this)closeRejectOv()">
+      <div style="background:#fff;border-radius:14px;width:92%;max-width:420px;box-shadow:0 8px 40px rgba(0,0,0,0.18);overflow:hidden;">
+        <div style="background:#1C2B3A;padding:18px 22px;display:flex;align-items:center;gap:10px;">
+          <span style="font-size:20px;">&#10007;</span>
+          <div>
+            <div style="color:#fff;font-size:15px;font-weight:600;">Reject Application</div>
+            <div style="color:rgba(255,255,255,0.45);font-size:11px;" id="reject-app-name"></div>
+          </div>
+        </div>
+        <div style="padding:22px;">
+          <label style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:8px;">Reason for rejection (optional)</label>
+          <textarea id="reject-reason-ta" rows="3" placeholder="e.g. Insufficient capital share, existing unpaid loan..." style="width:100%;padding:10px 12px;border:0.5px solid #E0DDD6;border-radius:8px;font-size:13px;font-family:Montserrat,sans-serif;resize:vertical;box-sizing:border-box;background:#FAFAF8;"></textarea>
+          <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
+            <button onclick="closeRejectOv()" style="padding:9px 20px;background:#F4F2EE;border:0.5px solid #E0DDD6;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;font-family:Montserrat,sans-serif;color:#666;">Cancel</button>
+            <button onclick="confirmRejectApp()" style="padding:9px 20px;background:#A32D2D;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:Montserrat,sans-serif;">&#10007; Reject</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <?!= include('LOAN-APP-script') ?>
+  </body>
+</html>

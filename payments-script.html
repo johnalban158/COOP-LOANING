@@ -1,0 +1,433 @@
+<script>
+  var _allPayments = [];
+  var _currentFilter = 'all';
+
+  /* ── Load payments from backend ── */
+  function loadPayments() {
+    var tbody = document.getElementById('pay-tbody');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">&#8635;</div><div class="empty-title">Loading...</div></div></td></tr>';
+
+    google.script.run
+      .withSuccessHandler(function (r) {
+        if (!r || !r.success) {
+          showToast('Error loading payments.');
+          return;
+        }
+        _allPayments = r.payments || [];
+        updateStatCards();
+        renderPayments(_currentFilter);
+      })
+      .withFailureHandler(function (e) {
+        showToast('Failed: ' + e.message);
+      })
+      .getPayments();
+  }
+
+  /* ── Compute & update stat cards ── */
+  function updateStatCards() {
+    var confirmed = _allPayments.filter(function (p) { return p.status === 'Confirmed'; });
+    var pending = _allPayments.filter(function (p) { return p.status === 'Pending'; });
+    var rejected = _allPayments.filter(function (p) { return p.status === 'Rejected'; });
+    var totalAmt = confirmed.reduce(function (s, p) { return s + (p.amount || 0); }, 0);
+
+    var sc = document.getElementById('stat-collected');
+    var sp = document.getElementById('stat-pending');
+    var st = document.getElementById('stat-total');
+    var sr = document.getElementById('stat-rejected');
+    if (sc) sc.textContent = '\u20B1' + Math.round(totalAmt).toLocaleString();
+    if (sp) sp.textContent = pending.length;
+    if (st) st.textContent = _allPayments.length;
+    if (sr) sr.textContent = rejected.length;
+  }
+
+  /* ── Render table rows ── */
+  function renderPayments(filter) {
+    _currentFilter = filter;
+    var role = localStorage.getItem('campuscoop_role') || 'admin';
+    
+    // First, filter by role
+    var roleFiltered = _allPayments;
+    if (role !== 'admin') {
+      roleFiltered = _allPayments.filter(function(p) {
+        var memberType = (p.memberId && p.memberId.indexOf('TCH') === 0) ? 'Teacher' : 'JO';
+        var loanType = p.loanType;
+        
+        if (role === 'regular') {
+          return loanType === 'Regular' || memberType === 'Teacher';
+        } else if (role === 'shortterm' || role === 'commodity') {
+          return (loanType === 'Short Term' || loanType === 'Commodity') && memberType === 'JO';
+        }
+        return true;
+      });
+    }
+
+    // Second, filter by status (the 'filter' variable)
+    var finalFiltered = [];
+    var filteredIdx = []; // track original index in _allPayments
+    for (var fi = 0; fi < _allPayments.length; fi++) {
+      var p = _allPayments[fi];
+      // Check if p is in roleFiltered
+      var inRole = role === 'admin' || roleFiltered.some(function(rf) { return rf.row === p.row; });
+      if (inRole && (filter === 'all' || p.status === filter)) {
+        finalFiltered.push(p);
+        filteredIdx.push(fi);
+      }
+    }
+
+    // Update stat cards based on ROLE-FILTERED payments (ignoring status filter for counts)
+    var confirmed = roleFiltered.filter(function (p) { return p.status === 'Confirmed'; });
+    var pending = roleFiltered.filter(function (p) { return p.status === 'Pending'; });
+    var rejected = roleFiltered.filter(function (p) { return p.status === 'Rejected'; });
+    var totalAmt = confirmed.reduce(function (s, p) { return s + (p.amount || 0); }, 0);
+
+    var sc = document.getElementById('stat-collected');
+    var sp = document.getElementById('stat-pending');
+    var st = document.getElementById('stat-total');
+    var sr = document.getElementById('stat-rejected');
+    if (sc) sc.textContent = '\u20B1' + Math.round(totalAmt).toLocaleString();
+    if (sp) sp.textContent = pending.length;
+    if (st) st.textContent = roleFiltered.length;
+    if (sr) sr.textContent = rejected.length;
+
+    var tbody = document.getElementById('pay-tbody');
+    if (!tbody) return;
+
+    if (finalFiltered.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">&#128179;</div><div class="empty-title">No payment records</div><div class="empty-sub">Role: ' + role + ' &middot; Filter: ' + filter + '</div></div></td></tr>';
+      return;
+    }
+
+    var html = '';
+    finalFiltered.forEach(function (p, fi) {
+      var idx = filteredIdx[fi]; // index in _allPayments
+      var statCls = 'stat-pending', statTx = p.status;
+      if (p.status === 'Confirmed') { statCls = 'stat-paid'; }
+      if (p.status === 'Rejected') { statCls = 'stat-rejected-badge'; }
+
+      var nameHtml = '<div class="mem-name">' + (p.memberName || p.memberId) + '</div>'
+        + '<div class="mem-id">' + (p.memberId || '') + '</div>';
+
+      var methodIcon = p.method === 'Cash' ? '&#128181;'
+        : p.method === 'GCash' ? '&#128241;'
+          : p.method === 'Salary Deduction' ? '&#128176;' : '&#128203;';
+
+      var proofHtml = p.proofUrl
+        ? '<a href="' + p.proofUrl + '" target="_blank" class="proof-link">&#128279; View Proof</a>'
+        : '<span style="color:#ccc;font-size:11px;">—</span>';
+
+      var orHtml = p.orNumber
+        ? '<a href="javascript:void(0)" class="or-ref-link" onclick="showORByIdx(' + idx + ')">' + p.orNumber + '</a>'
+        : '<span style="color:#ccc;font-size:11px;">—</span>';
+
+      var actionHtml = '';
+      // Chairperson is view-only: no action buttons
+      if (role === 'chairperson') {
+        actionHtml = '<span style="font-size:11px;color:#aaa;">Read-only</span>';
+      } else if (p.status === 'Pending') {
+        var isSalary = (p.method === 'Salary Deduction');
+        if (isSalary) {
+          actionHtml =
+            '<button class="btn-approve" style="background:#854F0B;font-size:11px;" onclick="confirmSalaryDeduction(' + idx + ')">&#128176; Confirm Salary Deduction</button> '
+            + '<button class="btn-reject" onclick="openRejectModal(' + idx + ')">&#10007; Reject</button>';
+        } else {
+          actionHtml =
+            '<button class="btn-approve" onclick="approvePayment(' + idx + ')">&#10003; Approve</button> '
+            + '<button class="btn-reject"  onclick="openRejectModal(' + idx + ')">&#10007; Reject</button>';
+        }
+      } else if (p.status === 'Confirmed' && p.orNumber) {
+        actionHtml = '<button class="btn-view-or" onclick="showORByIdx(' + idx + ')">&#128196; View OR</button>';
+      } else {
+        actionHtml = '<span style="font-size:11px;color:#aaa;">' + p.status + '</span>';
+      }
+
+      html += '<tr>';
+      html += '<td>' + nameHtml + '</td>';
+      html += '<td>' + (p.loanType || '—') + '</td>';
+      html += '<td>Month ' + (p.monthNum || '—') + '</td>';
+      html += '<td>' + methodIcon + ' ' + (p.method || '—') + '</td>';
+      html += '<td class="mono">&#8369;' + (p.amount ? Number(p.amount).toLocaleString() : '—') + '</td>';
+      html += '<td>' + (p.datePaid || '—') + '</td>';
+      html += '<td>' + orHtml + '</td>';
+      html += '<td>' + proofHtml + '</td>';
+      html += '<td><span class="status-badge ' + statCls + '">' + statTx + '</span></td>';
+      html += '<td>' + actionHtml + '</td>';
+      html += '</tr>';
+    });
+    tbody.innerHTML = html;
+  }
+
+  /* ── Filter buttons ── */
+  function setFilterPay(el, filter) {
+    document.querySelectorAll('#page-payments .filter-btn').forEach(function (b) {
+      b.classList.remove('on');
+    });
+    el.classList.add('on');
+    renderPayments(filter);
+  }
+
+  /* ── Approve ── */
+  var _payBusy = false;
+  var _pendingApproveIdx = null;
+  var _pendingSalaryIdx = null;
+
+  function approvePayment(idx) {
+    if (_payBusy) return;
+    var p = _allPayments[idx];
+    if (!p) return;
+    _pendingApproveIdx = idx;
+    var nameEl = document.getElementById('approve-pay-name');
+    if (nameEl) nameEl.textContent = (p.memberName || p.memberId) + ' — ₱' + Number(p.amount).toLocaleString();
+    var ov = document.getElementById('approve-ov');
+    if (ov) ov.style.display = 'flex';
+  }
+
+  /* ── Confirm Salary Deduction ── */
+  function confirmSalaryDeduction(idx) {
+    if (_payBusy) return;
+    var p = _allPayments[idx];
+    if (!p) return;
+    _pendingSalaryIdx = idx;
+    _pendingApproveIdx = null;
+    var nameEl = document.getElementById('approve-pay-name');
+    if (nameEl) nameEl.textContent = (p.memberName || p.memberId) + ' — ₱' + Number(p.amount).toLocaleString() + ' (Salary Deduction)';
+    var ov = document.getElementById('approve-ov');
+    if (ov) {
+      var btn = ov.querySelector('button[onclick="confirmApprovePayment()"]');
+      if (btn) { btn.style.background = '#854F0B'; btn.textContent = '💰 Confirm Deducted'; }
+      ov.style.display = 'flex';
+    }
+  }
+
+  function closeApproveOv() {
+    var ov = document.getElementById('approve-ov');
+    if (ov) ov.style.display = 'none';
+    _pendingApproveIdx = null;
+    _pendingSalaryIdx = null;
+    resetApproveModal();
+  }
+
+  function resetApproveModal() {
+    var confirm = document.getElementById('approve-state-confirm');
+    var loading = document.getElementById('approve-state-loading');
+    var success = document.getElementById('approve-state-success');
+    if (confirm) confirm.style.display = '';
+    if (loading) loading.style.display = 'none';
+    if (success) success.style.display = 'none';
+    var btn = document.querySelector('#approve-state-confirm button[onclick="confirmApprovePayment()"]');
+    if (btn) { btn.style.background = '#3B6D11'; btn.textContent = '\u2713 Approve'; }
+  }
+
+  function showApproveSuccess(p, orNumber) {
+    var confirm = document.getElementById('approve-state-confirm');
+    var loading = document.getElementById('approve-state-loading');
+    var success = document.getElementById('approve-state-success');
+    if (confirm) confirm.style.display = 'none';
+    if (loading) loading.style.display = 'none';
+    if (success) success.style.display = '';
+
+    document.getElementById('approve-success-or').textContent = 'OR: ' + (orNumber || '—');
+    document.getElementById('approve-success-member').textContent = p.memberName || p.memberId || '—';
+    document.getElementById('approve-success-amount').textContent = '\u20B1' + Number(p.amount).toLocaleString();
+
+    var viewBtn = document.getElementById('approve-btn-view-or');
+    if (viewBtn) {
+      viewBtn.onclick = function() {
+        p.orNumber = orNumber;
+        showORModal(p);
+      };
+    }
+  }
+
+  function confirmApprovePayment() {
+    var idx = _pendingApproveIdx !== null ? _pendingApproveIdx : _pendingSalaryIdx;
+    if (_payBusy || idx === null) return;
+    var p = _allPayments[idx];
+
+    if (!p) return;
+    _payBusy = true;
+
+    // Show loading state
+    var confirm = document.getElementById('approve-state-confirm');
+    var loading = document.getElementById('approve-state-loading');
+    if (confirm) confirm.style.display = 'none';
+    if (loading) loading.style.display = '';
+
+    document.querySelectorAll('#page-payments .btn-approve, #page-payments .btn-reject, #page-payments .btn-view-or')
+      .forEach(function(b){ b.disabled = true; b.style.opacity = '0.5'; b.style.cursor = 'not-allowed'; });
+
+    google.script.run
+      .withSuccessHandler(function (r) {
+        _payBusy = false;
+        if (r && r.success) {
+          p.orNumber = r.orNumber;
+          p.status = 'Confirmed';
+          p.confirmDateTime = r.confirmDateTime;
+          showApproveSuccess(p, r.orNumber);
+          loadPayments();
+        } else {
+          resetApproveModal();
+          showToast('Error: ' + (r && r.message ? r.message : 'Failed'));
+          document.querySelectorAll('#page-payments .btn-approve, #page-payments .btn-reject, #page-payments .btn-view-or')
+            .forEach(function(b){ b.disabled = false; b.style.opacity = ''; b.style.cursor = ''; });
+        }
+      })
+      .withFailureHandler(function (e) {
+        _payBusy = false;
+        resetApproveModal();
+        showToast('Error: ' + e.message);
+        document.querySelectorAll('#page-payments .btn-approve, #page-payments .btn-reject, #page-payments .btn-view-or')
+          .forEach(function(b){ b.disabled = false; b.style.opacity = ''; b.style.cursor = ''; });
+      })
+      .confirmPayment(p);
+  }
+
+  /* ── Reject modal ── */
+  var _pendingRejectRow = null;
+  function openRejectModal(idx) {
+    _pendingRejectRow = _allPayments[idx];
+    if (!_pendingRejectRow) return;
+    var ov = document.getElementById('reject-ov');
+    var ta = document.getElementById('reject-reason');
+    if (ta) ta.value = '';
+    if (ov) ov.style.display = 'flex';
+  }
+  function closeRejectModal() {
+    var ov = document.getElementById('reject-ov');
+    if (ov) ov.style.display = 'none';
+    _pendingRejectRow = null;
+  }
+  function confirmReject() {
+    if (!_pendingRejectRow || _payBusy) return;
+    var reason = (document.getElementById('reject-reason').value || '').trim();
+    if (!reason) { showToast('Please enter a reason for rejection.'); return; }
+    _pendingRejectRow.rejectReason = reason;
+    google.script.run
+      .withSuccessHandler(function (r) {
+        closeRejectModal();
+        if (r && r.success) {
+          showToast('Payment rejected. Email sent to member.');
+          loadPayments();
+        } else {
+          showToast('Error: ' + (r && r.message ? r.message : 'Failed'));
+        }
+      })
+      .withFailureHandler(function (e) { closeRejectModal(); showToast('Error: ' + e.message); })
+      .rejectPaymentRecord(_pendingRejectRow);
+  }
+
+  /* ── Proof viewer ── */
+  function viewProof(url) {
+    var ov = document.getElementById('proof-ov');
+    var img = document.getElementById('proof-full-img');
+    var link = document.getElementById('proof-drive-link');
+    if (img) img.src = url;
+    if (link) link.href = url;
+    if (ov) ov.style.display = 'flex';
+  }
+  function closeProof() {
+    var ov = document.getElementById('proof-ov');
+    if (ov) ov.style.display = 'none';
+  }
+
+  /* ── OR Receipt Modal ── */
+  function showORByIdx(idx) {
+    var p = _allPayments[idx];
+    if (p) showORModal(p);
+  }
+  function showORModal(p) {
+    document.getElementById('or-ref').textContent = p.orNumber || '—';
+    document.getElementById('or-name').textContent = p.memberName || '—';
+    document.getElementById('or-id').textContent = p.memberId || '—';
+    document.getElementById('or-loan').textContent = p.loanType || '—';
+    document.getElementById('or-month').textContent = 'Month ' + (p.monthNum || '—');
+    document.getElementById('or-amount').textContent = '\u20B1' + (p.amount ? Number(p.amount).toLocaleString() : '—');
+    document.getElementById('or-method').textContent = p.method || '—';
+    document.getElementById('or-datetime').textContent = p.confirmDateTime || p.datePaid || p.timestamp || '—';
+    document.getElementById('or-status').textContent = 'CONFIRMED';
+    // Generate QR code for verification
+    var qrData = 'CampusCoop OR: ' + (p.orNumber || 'N/A')
+      + ' | Member: ' + (p.memberId || '')
+      + ' | Amount: P' + (p.amount || 0)
+      + ' | Loan: ' + (p.loanType || '')
+      + ' | Date: ' + (p.confirmDateTime || p.datePaid || '');
+    var qrImg = document.getElementById('or-qr-img');
+    if (qrImg) {
+      qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(qrData);
+    }
+    var ov = document.getElementById('or-ov');
+    if (ov) ov.style.display = 'flex';
+  }
+  function closeORModal() {
+    var ov = document.getElementById('or-ov');
+    if (ov) ov.style.display = 'none';
+  }
+
+  /* ── Search by OR Number ── */
+  function searchByOR() {
+    var input = document.getElementById('or-search-input');
+    var val = (input ? input.value : '').trim();
+    if (!val) { showToast('Please enter a reference number.'); return; }
+    google.script.run
+      .withSuccessHandler(function (r) {
+        if (!r || !r.success) {
+          showToast('Error: ' + (r && r.message ? r.message : 'Search failed.'));
+          return;
+        }
+        if (!r.found) {
+          showToast('No receipt found for: ' + val);
+          return;
+        }
+        showORModal(r.payment);
+      })
+      .withFailureHandler(function (e) { showToast('Search error: ' + e.message); })
+      .searchPaymentByOR(val);
+  }
+
+  /* ── Download OR as PDF (via window.print) ── */
+  function downloadORasPDF() {
+    var card = document.getElementById('or-card-print');
+    if (!card) return;
+    var printWin = window.open('', '_blank', 'width=600,height=800');
+    printWin.document.write('<!DOCTYPE html><html><head><title>Official Receipt</title>');
+    printWin.document.write('<style>');
+    printWin.document.write("@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');");
+    printWin.document.write('*{box-sizing:border-box;margin:0;padding:0}body{font-family:Montserrat,Arial,sans-serif;background:#fff;padding:32px}');
+    printWin.document.write('.or-card{border:1.5px solid #E0DDD6;border-radius:16px;overflow:hidden;max-width:480px;margin:0 auto}');
+    printWin.document.write('.or-card-header{background:#1C2B3A;padding:24px;text-align:center}');
+    printWin.document.write('.or-org{font-size:18px;font-weight:700;color:#fff;letter-spacing:0.05em}');
+    printWin.document.write('.or-org span{color:#7BBFFF}');
+    printWin.document.write('.or-org-sub{font-size:10px;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:0.08em;margin-top:3px}');
+    printWin.document.write('.or-badge{display:inline-block;background:rgba(255,255,255,0.12);color:#fff;font-size:10px;font-weight:700;letter-spacing:0.12em;padding:5px 14px;border-radius:20px;margin-top:12px;text-transform:uppercase}');
+    printWin.document.write('.or-ref-row{background:#F8F9FA;padding:16px;text-align:center;border-bottom:0.5px solid #E0DDD6}');
+    printWin.document.write('.or-ref-label{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px}');
+    printWin.document.write('.or-ref-val{font-size:16px;font-weight:700;font-family:"DM Mono",monospace;color:#1C2B3A;letter-spacing:0.04em}');
+    printWin.document.write('.or-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;padding:0}');
+    printWin.document.write('.or-detail-item{padding:12px 16px;border-bottom:0.5px solid #F0EDE8}');
+    printWin.document.write('.or-detail-item:nth-child(odd){border-right:0.5px solid #F0EDE8}');
+    printWin.document.write('.or-dl{font-size:10px;color:#aaa;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:3px}');
+    printWin.document.write('.or-dv{font-size:13px;font-weight:500;color:#1a1a1a}');
+    printWin.document.write('.or-amt{font-family:"DM Mono",monospace;font-weight:700;font-size:15px;color:#1B5E20}');
+    printWin.document.write('.or-status-val{color:#3B6D11;font-weight:700}');
+    printWin.document.write('.or-qr-section{padding:20px 16px;text-align:center;border-top:0.5px solid #E0DDD6;background:#FDFCFB}');
+    printWin.document.write('.or-qr-img{width:120px;height:120px;border:4px solid #fff;border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,0.08)}');
+    printWin.document.write('.or-qr-label{font-size:10px;color:#aaa;text-transform:uppercase;letter-spacing:0.08em;margin-top:8px;font-weight:500}');
+    printWin.document.write('.or-note{padding:14px 16px;font-size:11px;color:#555;text-align:center;background:#FAFAF8;border-top:0.5px solid #E0DDD6;line-height:1.6}');
+    printWin.document.write('.or-actions{display:none}');
+    printWin.document.write('@media print{body{padding:0}.or-actions{display:none}}');
+    printWin.document.write('</style></head><body>');
+    printWin.document.write(card.querySelector('.or-card').outerHTML);
+    printWin.document.write('</body></html>');
+    printWin.document.close();
+    setTimeout(function(){ printWin.print(); }, 600);
+  }
+
+  /* ── Enter key triggers search ── */
+  document.addEventListener('DOMContentLoaded', function() {
+    var inp = document.getElementById('or-search-input');
+    if (inp) inp.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') searchByOR();
+    });
+  });
+
+  /* ── loadPayments() is triggered by navigate() in sidedbar-script.html ── */
+</script>

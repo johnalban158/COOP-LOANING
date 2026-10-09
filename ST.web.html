@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <script>window.SCRIPT_URL='<?= scriptUrl ?>'; window.CURRENT_PAGE='shortterm';</script>
+    <?!= include('ST.style') ?>
+    <style>.page{display:none;flex:1;flex-direction:column;overflow:hidden;}.page.active{display:flex;}</style>
+  </head>
+  <body>
+    <div class="shell">
+      <?!= include('sidebar') ?>
+      <?!= include('sidedbar-script') ?>
+      <div class="page active" id="page-shortterm" style="flex:1;flex-direction:column;overflow:hidden;">
+      <div class="main">
+        <div class="topbar">
+          <div>
+            <div class="topbar-title">
+              Short Term Loans
+            </div>
+            <div class="topbar-sub">
+              AY 2025-2026 &middot;
+              Max &#8369;15,000 &middot;
+              1&ndash;6 months &middot;
+              6% flat interest
+            </div>
+          </div>
+          <div class="topbar-right">
+            <button class="btn-back"
+              onclick="top.location.href=window.SCRIPT_URL+'?page=dashboard'">
+              &larr; Dashboard
+            </button>
+            <button class="btn-primary">
+              + New STL
+            </button>
+          </div>
+        </div>
+        <div class="content">
+
+          <div class="info-banner">
+            <div class="info-icon">
+              &#9432;
+            </div>
+            <div>
+              <div class="info-title">
+                Short Term Loan Rules
+              </div>
+              <div class="info-text">
+                Maximum amount: &#8369;15,000
+                &middot;
+                Term: 1 to 6 months &middot;
+                Interest: 6% flat rate &middot;
+                Monthly = (Amount &times;
+                1.06) &divide; Months &middot;
+                Available to all members
+              </div>
+            </div>
+          </div>
+
+          <div class="filter-row">
+            <span class="filter-label">
+              Filter:
+            </span>
+            <button class="filter-btn on"
+              onclick="setFilter(
+              this,'all')">
+              All
+            </button>
+            <button class="filter-btn
+              f-active"
+              onclick="setFilter(
+              this,'active')">
+              Active
+            </button>
+            <button class="filter-btn
+              f-overdue"
+              onclick="setFilter(
+              this,'overdue')">
+              Overdue
+            </button>
+            <button class="filter-btn
+              f-paid"
+              onclick="setFilter(
+              this,'paid')">
+              Paid
+            </button>
+          </div>
+
+          <!-- ── Enroll New Member Panel (STL Officer) ── -->
+          <div style="background:#fff;border:0.5px solid #E0DDD6;border-radius:12px;margin-bottom:16px;overflow:hidden;">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;cursor:pointer;background:#FAFAF8;" onclick="var p=document.getElementById('st-addm-panel');p.style.display=p.style.display==='none'?'block':'none'">
+              <div style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;color:#1C2B3A;">&#128100; Enroll New Member</div>
+              <span style="font-size:11px;color:#888;">Click to expand</span>
+            </div>
+            <div id="st-addm-panel" style="display:none;padding:16px 18px;border-top:0.5px solid #E0DDD6;">
+              <div id="st-addm-err" style="display:none;color:#A32D2D;background:#FCEBEB;padding:8px 12px;border-radius:6px;font-size:12px;margin-bottom:10px;border:0.5px solid #F7C1C1;"></div>
+              <div id="st-addm-ok" style="display:none;color:#3B6D11;background:#EAF3DE;padding:8px 12px;border-radius:6px;font-size:12px;margin-bottom:10px;border:0.5px solid #C0DD97;"></div>
+              <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px;">
+                <div><label style="font-size:11px;font-weight:500;color:#444;display:block;margin-bottom:4px;">Member type</label><select id="st-addm-type" style="width:100%;padding:8px;border:0.5px solid #ccc;border-radius:6px;font-size:12px;"><option value="Teacher">Teacher</option><option value="Job Order">Job Order</option></select></div>
+                <div><label style="font-size:11px;font-weight:500;color:#444;display:block;margin-bottom:4px;">First name *</label><input id="st-addm-first" placeholder="First name" style="width:100%;padding:8px;border:0.5px solid #ccc;border-radius:6px;font-size:12px;"/></div>
+                <div><label style="font-size:11px;font-weight:500;color:#444;display:block;margin-bottom:4px;">Last name *</label><input id="st-addm-last" placeholder="Last name" style="width:100%;padding:8px;border:0.5px solid #ccc;border-radius:6px;font-size:12px;"/></div>
+                <div><label style="font-size:11px;font-weight:500;color:#444;display:block;margin-bottom:4px;">Department</label><input id="st-addm-dept" placeholder="Dept / Office" style="width:100%;padding:8px;border:0.5px solid #ccc;border-radius:6px;font-size:12px;"/></div>
+                <div><label style="font-size:11px;font-weight:500;color:#444;display:block;margin-bottom:4px;">Email</label><input id="st-addm-email" type="email" placeholder="email@example.com" style="width:100%;padding:8px;border:0.5px solid #ccc;border-radius:6px;font-size:12px;"/></div>
+                <div><label style="font-size:11px;font-weight:500;color:#444;display:block;margin-bottom:4px;">Mobile (Login ID)</label><input id="st-addm-phone" type="tel" placeholder="09XXXXXXXXX" style="width:100%;padding:8px;border:0.5px solid #ccc;border-radius:6px;font-size:12px;"/></div>
+                <div><label style="font-size:11px;font-weight:500;color:#444;display:block;margin-bottom:4px;">Initial CBU &#8369;</label><input id="st-addm-capital" type="number" placeholder="0.00" min="0" style="width:100%;padding:8px;border:0.5px solid #ccc;border-radius:6px;font-size:12px;"/></div>
+              </div>
+              <div style="background:#FFF8E1;border:0.5px solid #FFD54F;border-radius:8px;padding:10px 14px;font-size:12px;color:#854F0B;margin-bottom:12px;">&#128241; A random 6-digit password will be <strong>auto-generated</strong> and sent to the member's mobile and email. The member must change it on first login.</div>
+              <button id="st-addm-enroll-btn" onclick="doEnrollMemberSTL()" style="padding:8px 22px;background:#1C2B3A;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">&#10003; Enroll Member</button>
+            </div>
+          </div>
+
+          <!-- Pending Applications Section -->
+          <div style="background:#FFF8E1;border:0.5px solid #FFD54F;border-radius:12px;padding:16px 18px;margin-bottom:16px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+              <div style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px;color:#854F0B;">&#128203; Pending Loan Applications</div>
+              <button onclick="loadSTPendingApps()" style="padding:6px 14px;background:#854F0B;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">&#8635; Refresh</button>
+            </div>
+            <div class="table-wrap" style="background:#fff;border-radius:8px;overflow:hidden;">
+              <table style="font-size:12px;">
+                <thead><tr>
+                  <th>Applicant</th><th>Amount</th><th>Term</th><th>Submitted</th><th>Status</th><th>Action</th>
+                </tr></thead>
+                <tbody id="st-pending-table"><tr><td colspan="6">
+                  <div style="text-align:center;padding:20px;color:#888;font-size:12px;">Loading pending applications...</div>
+                </td></tr></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- ── Loan Migration Panel ── -->
+          <div style="background:#fff;border:0.5px solid #E0DDD6;border-radius:12px;margin-bottom:16px;overflow:hidden;">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;cursor:pointer;background:#FAFAF8;" onclick="var p=document.getElementById('st-mig-panel');p.style.display=p.style.display==='none'?'block':'none'">
+              <div style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;color:#1C2B3A;">&#128230; Import Existing Loans</div>
+              <span style="font-size:11px;color:#888;">Click to expand</span>
+            </div>
+            <div id="st-mig-panel" style="display:none;padding:16px 18px;border-top:0.5px solid #E0DDD6;">
+              <div id="st-mig-msg" style="display:none;padding:8px 12px;border-radius:6px;font-size:12px;font-weight:600;margin-bottom:10px;"></div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:12px;">
+                <div><label style="font-size:11px;font-weight:600;color:#444;display:block;margin-bottom:4px;">Member ID *</label><input id="st-mig-id" placeholder="e.g. 09123456789" style="width:100%;padding:8px;border:0.5px solid #ccc;border-radius:6px;font-size:12px;"/></div>
+                <div><label style="font-size:11px;font-weight:600;color:#444;display:block;margin-bottom:4px;">Full Name *</label><input id="st-mig-name" placeholder="Last, First" style="width:100%;padding:8px;border:0.5px solid #ccc;border-radius:6px;font-size:12px;"/></div>
+                <div><label style="font-size:11px;font-weight:600;color:#444;display:block;margin-bottom:4px;">Loan Amount (&#8369;) *</label><input id="st-mig-amount" type="number" min="0" placeholder="0.00" oninput="calcMigPreview('st')" style="width:100%;padding:8px;border:0.5px solid #ccc;border-radius:6px;font-size:12px;"/></div>
+                <div><label style="font-size:11px;font-weight:600;color:#444;display:block;margin-bottom:4px;">Term (months) *</label><input id="st-mig-term" type="number" min="1" placeholder="e.g. 6" oninput="calcMigPreview('st')" style="width:100%;padding:8px;border:0.5px solid #ccc;border-radius:6px;font-size:12px;"/></div>
+                <div><label style="font-size:11px;font-weight:600;color:#444;display:block;margin-bottom:4px;">Date Released</label><input id="st-mig-date" type="date" style="width:100%;padding:8px;border:0.5px solid #ccc;border-radius:6px;font-size:12px;"/></div>
+                <div><label style="font-size:11px;font-weight:600;color:#444;display:block;margin-bottom:4px;">Months Already Paid</label><input id="st-mig-paid" type="number" min="0" placeholder="0" oninput="calcMigPreview('st')" style="width:100%;padding:8px;border:0.5px solid #ccc;border-radius:6px;font-size:12px;"/></div>
+              </div>
+              <div id="st-mig-preview" style="display:none;background:#F4F8FC;border:0.5px solid #B5D4F4;border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:12px;">
+                <span style="font-weight:600;color:#185FA5;">Preview:</span>
+                <span id="st-mig-pv-monthly" style="margin-left:12px;"></span>
+                <span id="st-mig-pv-total" style="margin-left:12px;"></span>
+                <span id="st-mig-pv-balance" style="margin-left:12px;"></span>
+                <span id="st-mig-pv-status" style="margin-left:12px;"></span>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <button onclick="addMigToQueue('st')" style="padding:8px 20px;background:#185FA5;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">+ Add to Queue</button>
+                <span id="st-mig-count" style="font-size:12px;color:#888;">Queue: 0</span>
+                <button onclick="saveMigQueue('st')" id="st-mig-save-btn" disabled style="padding:8px 20px;background:#3B6D11;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;opacity:0.5;">&#128190; Save All (0)</button>
+              </div>
+              <div style="margin-top:12px;overflow-x:auto;display:none;" id="st-mig-queue-wrap">
+                <table style="font-size:11px;width:100%;border-collapse:collapse;">
+                  <thead><tr style="background:#F4F2EE;">
+                    <th style="padding:6px;border:1px solid #E0DDD6;">#</th>
+                    <th style="padding:6px;border:1px solid #E0DDD6;">Member</th>
+                    <th style="padding:6px;border:1px solid #E0DDD6;">Amount</th>
+                    <th style="padding:6px;border:1px solid #E0DDD6;">Term</th>
+                    <th style="padding:6px;border:1px solid #E0DDD6;">Monthly</th>
+                    <th style="padding:6px;border:1px solid #E0DDD6;">Balance</th>
+                    <th style="padding:6px;border:1px solid #E0DDD6;">Status</th>
+                    <th style="padding:6px;border:1px solid #E0DDD6;"></th>
+                  </tr></thead>
+                  <tbody id="st-mig-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Member</th>
+                  <th>Type</th>
+                  <th>Amount</th>
+                  <th>Monthly</th>
+                  <th>Months</th>
+                  <th>Progress</th>
+                  <th>Balance</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="st-table">
+                <tr>
+                  <td colspan="9">
+                    <div class="empty-state">
+                      <div class="empty-icon">
+                        &#9889;
+                      </div>
+                      <div class="empty-title">
+                        No short term loans yet
+                      </div>
+                      <div class="empty-sub">
+                        Short term loan accounts
+                        will appear here once
+                        your Google Spreadsheet
+                        is connected and loans
+                        are recorded.
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+      </div>
+
+      <!-- ═══ PAGE: ACCOUNTS ═══ -->
+      <div class="page" id="page-accounts" style="flex:1;flex-direction:column;overflow:hidden;">
+      <div class="main" style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
+        <div class="topbar">
+          <div>
+            <div class="topbar-title">&#128100; Member Accounts</div>
+            <div class="topbar-sub">Enroll new members &middot; Auto-generated credentials sent via SMS &amp; email</div>
+          </div>
+          <div class="topbar-right">
+            <button class="btn-back" onclick="navigate('shortterm')">&larr; Back</button>
+            <button class="btn-primary" onclick="loadAccountsPage()">&#8635; Refresh</button>
+          </div>
+        </div>
+        <div class="content">
+          <!-- Enroll Form -->
+          <div style="background:#fff;border:0.5px solid #E0DDD6;border-radius:14px;padding:22px 24px;margin-bottom:22px;">
+            <div style="font-size:14px;font-weight:700;color:#1C2B3A;margin-bottom:4px;">&#10133; Enroll New Member</div>
+            <div style="font-size:12px;color:#888;margin-bottom:16px;">Fill in the details below. A 6-digit password is auto-generated and sent to the member's mobile &amp; email.</div>
+            <div id="acc-err" style="display:none;background:#FCEBEB;color:#A32D2D;border:0.5px solid #F7C1C1;border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:12px;"></div>
+            <div id="acc-ok" style="display:none;background:#EAF3DE;color:#3B6D11;border:0.5px solid #C0DD97;border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:12px;"></div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px;">
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#555;text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:5px;">Member Type</label>
+                <select id="acc-type" style="width:100%;padding:9px 12px;border:1px solid #E0DDD6;border-radius:8px;font-size:13px;background:#fff;">
+                  <option value="Teacher">Teacher</option>
+                  <option value="Job Order">Job Order</option>
+                </select>
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#555;text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:5px;">First Name *</label>
+                <input id="acc-first" placeholder="First name" style="width:100%;padding:9px 12px;border:1px solid #E0DDD6;border-radius:8px;font-size:13px;outline:none;" onfocus="this.style.borderColor='#1C2B3A'" onblur="this.style.borderColor='#E0DDD6'"/>
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#555;text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:5px;">Last Name *</label>
+                <input id="acc-last" placeholder="Last name" style="width:100%;padding:9px 12px;border:1px solid #E0DDD6;border-radius:8px;font-size:13px;outline:none;" onfocus="this.style.borderColor='#1C2B3A'" onblur="this.style.borderColor='#E0DDD6'"/>
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#555;text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:5px;">Department <span style="color:#999;font-weight:400;font-size:10px;">(Optional)</span></label>
+                <input id="acc-dept" placeholder="Dept / Office" style="width:100%;padding:9px 12px;border:1px solid #E0DDD6;border-radius:8px;font-size:13px;outline:none;" onfocus="this.style.borderColor='#1C2B3A'" onblur="this.style.borderColor='#E0DDD6'"/>
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#555;text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:5px;">Email <span style="color:#999;font-weight:400;font-size:10px;">(Optional)</span></label>
+                <input id="acc-email" type="email" placeholder="email@example.com" style="width:100%;padding:9px 12px;border:1px solid #E0DDD6;border-radius:8px;font-size:13px;outline:none;" onfocus="this.style.borderColor='#1C2B3A'" onblur="this.style.borderColor='#E0DDD6'"/>
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#555;text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:5px;">Mobile (Login ID) <span style="color:#999;font-weight:400;font-size:10px;">(Optional)</span></label>
+                <input id="acc-phone" type="tel" placeholder="09XXXXXXXXX" style="width:100%;padding:9px 12px;border:1px solid #E0DDD6;border-radius:8px;font-size:13px;outline:none;" onfocus="this.style.borderColor='#1C2B3A'" onblur="this.style.borderColor='#E0DDD6'"/>
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#555;text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:5px;">Initial CBU &#8369;</label>
+                <input id="acc-capital" type="number" placeholder="0.00" min="0" style="width:100%;padding:9px 12px;border:1px solid #E0DDD6;border-radius:8px;font-size:13px;outline:none;" onfocus="this.style.borderColor='#1C2B3A'" onblur="this.style.borderColor='#E0DDD6'"/>
+              </div>
+            </div>
+            <div style="background:#FFF8E1;border:0.5px solid #FFD54F;border-radius:8px;padding:10px 14px;font-size:12px;color:#854F0B;margin-bottom:16px;">&#128241; A random 6-digit password is <strong>auto-generated</strong> and sent via SMS &amp; email. Member must change it on first login.</div>
+            <button id="acc-enroll-btn" onclick="doEnrollAccountsPage()" style="padding:10px 28px;background:#1C2B3A;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">&#10003; Enroll Member</button>
+          </div>
+          <!-- Enrolled Members List -->
+          <div style="background:#fff;border:0.5px solid #E0DDD6;border-radius:14px;overflow:hidden;">
+            <div style="padding:16px 22px;border-bottom:0.5px solid #E0DDD6;display:flex;align-items:center;justify-content:space-between;">
+              <div style="font-size:13px;font-weight:700;color:#1C2B3A;">&#128203; All Enrolled Members</div>
+              <input id="st-acc-search" placeholder="Search name or mobile..." oninput="filterAccountsList()" style="padding:7px 12px;border:0.5px solid #E0DDD6;border-radius:8px;font-size:12px;width:220px;outline:none;"/>
+            </div>
+            <div class="table-wrap" style="max-height:420px;overflow-y:auto;">
+              <table>
+                <thead><tr>
+                  <th>Name</th><th>Type</th><th>Department</th>
+                  <th>Mobile</th><th>Email</th><th>CBU</th><th>Date Joined</th><th>Status</th>
+                </tr></thead>
+                <tbody id="st-acc-tbody">
+                  <tr><td colspan="8"><div class="empty-state"><div class="empty-icon">&#128100;</div><div class="empty-title">Loading members...</div></div></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay"
+      id="st-modal"
+      onclick="if(event.target===this)
+        closeModal()">
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-title"
+               id="modal-title">
+            STL Details
+          </div>
+          <span class="modal-close"
+            onclick="closeModal()">
+            &times;
+          </span>
+        </div>
+        <div class="modal-body"
+             id="modal-body">
+        </div>
+      </div>
+    </div>
+
+    <?!= include('MEMBERS-script') ?>
+    <?!= include('ST.script') ?>
+  </body>
+</html>

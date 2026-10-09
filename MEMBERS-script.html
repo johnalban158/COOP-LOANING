@@ -1,0 +1,290 @@
+<script>
+  var MEMBERS_DATA = [];
+  var _cbuSettings = { regPct: 100, stPct: 50 };
+  var _currentMemFilter = 'all';
+
+  function loadMembers() {
+    var tbody = document.getElementById('mem-tbody');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">&#8635;</div><div class="empty-title">Loading members...</div></div></td></tr>';
+    google.script.run
+      .withSuccessHandler(function(r) {
+        if (!r || !r.success) {
+          var msg = (r && r.message) || 'Connect spreadsheet in Settings.';
+          if (tbody) tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">&#9888;</div><div class="empty-title">Failed to load</div><div class="empty-sub">' + msg + '</div><div style="margin-top:10px;"><button class="btn-primary" onclick="navigate(\'settings\')">&#128452; Open Settings</button><button class="btn-secondary" onclick="forceRefreshMembers()" style="margin-left:8px;">&#8635; Force Refresh</button></div></div></td></tr>';
+          return;
+        }
+        MEMBERS_DATA = r.data || r.members || [];
+        loadCbuSettings();
+        renderMembersTable('all');
+      })
+      .withFailureHandler(function(e) {
+        if (tbody) tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">&#9888;</div><div class="empty-title">Error</div><div class="empty-sub">' + e.message + '</div><div style="margin-top:10px;"><button class="btn-secondary" onclick="forceRefreshMembers()">&#8635; Force Refresh</button></div></div></td></tr>';
+      })
+      .getMembers();
+  }
+
+  function forceRefreshMembers() {
+    var tbody = document.getElementById('mem-tbody');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">&#8635;</div><div class="empty-title">Clearing cache and reloading...</div></div></td></tr>';
+    google.script.run
+      .withSuccessHandler(function(r) {
+        if (r && r.success) {
+          showToast('\u2713 ' + r.message);
+          loadMembers();
+        } else {
+          showToast('\u274C ' + (r && r.message || 'Failed to clear cache'));
+          loadMembers();
+        }
+      })
+      .withFailureHandler(function(e) {
+        showToast('\u274C ' + e.message);
+        loadMembers();
+      })
+      .clearMembersCache();
+  }
+
+  function loadCbuSettings() {
+    google.script.run
+      .withSuccessHandler(function(r) {
+        if (r && r.success) {
+          _cbuSettings.regPct = r.regPct || 100;
+          _cbuSettings.stPct = r.stPct || 50;
+        }
+      })
+      .withFailureHandler(function() {})
+      .getCbuSettings();
+  }
+
+  function renderMembersTable(filter) {
+    _currentMemFilter = filter;
+    var tbody = document.getElementById('mem-tbody');
+    if (!tbody) return;
+
+    var data = MEMBERS_DATA;
+    if (filter !== 'all') {
+      data = data.filter(function(m) { return (m.memberType || '').toLowerCase() === filter.toLowerCase(); });
+    }
+
+    if (data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">&#128100;</div><div class="empty-title">No members found</div><div class="empty-sub">No members match the current filter.</div></div></td></tr>';
+      return;
+    }
+
+    var html = '';
+    data.forEach(function(m) {
+      var fullName = (m.firstName || '') + ' ' + (m.lastName || '');
+      var typeBadge = m.memberType === 'Teacher'
+        ? '<span style="background:#E6F1FB;color:#185FA5;padding:2px 8px;border-radius:10px;font-size:11px;">Teacher</span>'
+        : '<span style="background:#EAF3DE;color:#3B6D11;padding:2px 8px;border-radius:10px;font-size:11px;">Job Order</span>';
+      var roleBadge  = m.role === 'Officer'
+        ? ' <span style="background:#EDE9FE;color:#5B21B6;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;">Officer</span>'
+        : '';
+      var capital    = Number(m.capital) || 0;
+      var capitalFmt = capital ? '&#8369;' + capital.toLocaleString() : '&mdash;';
+      var pct = m.memberType === 'Teacher' ? _cbuSettings.regPct : _cbuSettings.stPct;
+      var maxElig = capital > 0
+        ? '&#8369;' + Math.round(capital * pct / 100).toLocaleString() + ' (' + pct + '% CBU)'
+        : (m.memberType === 'Teacher' ? 'Up to &#8369;200,000' : 'Up to &#8369;15,000');
+      var statusBadge = (m.status === 'Active' || !m.status)
+        ? '<span style="background:#EAF3DE;color:#3B6D11;padding:2px 8px;border-radius:10px;font-size:11px;">Active</span>'
+        : '<span style="background:#FAEEDA;color:#854F0B;padding:2px 8px;border-radius:10px;font-size:11px;">' + (m.status || 'Active') + '</span>';
+
+      var currentRole = localStorage.getItem('campuscoop_role') || '';
+      var isChairperson = currentRole === 'chairperson' || currentRole === 'masteradmin' || currentRole === 'admin';
+      var roleBtn = m.role === 'Officer'
+        ? '<button class="action-btn reject" onclick=\'confirmRoleChange(' + JSON.stringify(m).replace(/'/g, ''') + ', "Member")\'>&#8635; Revoke Officer</button>'
+        : (isChairperson ? '<button class="action-btn approve" onclick=\'confirmRoleChange(' + JSON.stringify(m).replace(/'/g, ''') + ', "Officer")\'>&#11088; Promote to Officer</button>' : '');
+
+      html += '<tr>';
+      html += '<td><div style="font-weight:600;font-size:13px;">' + fullName + '</div><div style="font-size:11px;color:#888;">' + m.username + ' &middot; ' + m.email + '</div></td>';
+      html += '<td>' + typeBadge + roleBadge + '</td>';
+      html += '<td style="font-size:12px;">' + (m.department || '&mdash;') + '</td>';
+      html += '<td style="font-weight:700;font-family:monospace;font-size:12px;">' + capitalFmt + '</td>';
+      html += '<td style="font-size:12px;color:#185FA5;">' + maxElig + '</td>';
+      html += '<td>' + statusBadge + '</td>';
+      html += '<td style="font-size:12px;">' + (m.dateJoined || '&mdash;') + '</td>';
+      html += '<td><button class="action-btn" onclick=\'viewMember(' + JSON.stringify(m).replace(/'/g, ''') + ')\'>View</button>' + roleBtn + '</td>';
+      html += '</tr>';
+    });
+    tbody.innerHTML = html;
+  }
+
+  /* ── Filter & search ── */
+  function setFilterMem(el, filter) {
+    _currentMemFilter = filter;
+    document.querySelectorAll('.search-row .filter-btn').forEach(function(b) { b.classList.remove('on'); });
+    el.classList.add('on');
+    renderMembersTable(filter);
+  }
+  function searchMembers() { renderMembersTable(_currentMemFilter); }
+
+  /* ── View member modal (with Edit mode) ── */
+  function viewMember(m) {
+    var body = document.getElementById('mem-modal-body');
+    if (!body) return;
+
+    window._editingMember = m;
+
+    var capital = Number(m.capital) || 0;
+    var pct = m.memberType === 'Teacher' ? _cbuSettings.regPct : _cbuSettings.stPct;
+    var maxAmt = capital > 0
+      ? '\u20B1' + Math.round(capital * pct / 100).toLocaleString() + ' (' + pct + '% of CBU)'
+      : (m.memberType === 'Teacher' ? 'Up to \u20B115,000 (no CBU set)' : 'Up to \u20B115,000 (no CBU set)');
+
+    var currentRole = localStorage.getItem('campuscoop_role') || '';
+    var isChairperson = currentRole === 'chairperson' || currentRole === 'masteradmin' || currentRole === 'admin';
+
+    body.innerHTML =
+      '<div class="modal-section">Member information</div>'
+      + '<div class="detail-grid">'
+      + '<div class="detail-item"><div class="detail-label">Member ID</div><div class="detail-val"><strong>' + m.username + '</strong></div></div>'
+      + '<div class="detail-item"><div class="detail-label">Full name</div><div class="detail-val">' + m.firstName + ' ' + m.lastName + '</div></div>'
+      + '<div class="detail-item"><div class="detail-label">Type</div><div class="detail-val">' + m.memberType + '</div></div>'
+      + '<div class="detail-item"><div class="detail-label">Role</div><div class="detail-val">' + (m.role === 'Officer' ? '<span style="color:#5B21B6;font-weight:700;">Officer</span>' : '<span style="color:#444;">Member</span>') + '</div></div>'
+      + '<div class="detail-item"><div class="detail-label">Department</div><div class="detail-val">' + (m.department || '&mdash;') + '</div></div>'
+      + '<div class="detail-item"><div class="detail-label">Email</div><div class="detail-val">' + (m.email || '&mdash;') + '</div></div>'
+      + '<div class="detail-item"><div class="detail-label">Phone</div><div class="detail-val">' + (m.phone || '&mdash;') + '</div></div>'
+      + '<div class="detail-item"><div class="detail-label">Date joined</div><div class="detail-val">' + (m.dateJoined || '&mdash;') + '</div></div>'
+      + '<div class="detail-item"><div class="detail-label">Status</div><div class="detail-val">' + (m.status || 'Active') + '</div></div>'
+      + '<div class="detail-item"><div class="detail-label">Password</div><div class="detail-val" style="font-family:monospace;letter-spacing:2px;color:#999;">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</div></div>'
+      + '</div>'
+      + '<div class="modal-section">Financial information (CBU)</div>'
+      + '<div class="detail-grid">'
+      + '<div class="detail-item"><div class="detail-label">Capital Build Up (CBU)</div><div class="detail-val" style="font-weight:700;font-size:16px;">\u20B1' + capital.toLocaleString() + '</div></div>'
+      + '<div class="detail-item"><div class="detail-label">Max Loanable</div><div class="detail-val" style="color:#185FA5;font-weight:600;">' + maxAmt + '</div></div>'
+      + '</div>'
+      + '<div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">'
+      + '<button class="action-btn approve" onclick=\'sendMemberReset(' + JSON.stringify(m).replace(/'/g, ''') + ')\'>&#128231; Send password reset link</button>'
+      + (m.role === 'Officer'
+        ? '<button class="action-btn reject" onclick=\'confirmRoleChange(' + JSON.stringify(m).replace(/'/g, ''') + ', "Member")\'>&#8635; Revoke Officer</button>'
+        : (isChairperson ? '<button class="action-btn approve" onclick=\'confirmRoleChange(' + JSON.stringify(m).replace(/'/g, ''') + ', "Officer")\'>&#11088; Promote to Officer</button>' : ''))
+      + '</div>'
+      + '<div class="modal-actions">'
+      + '<button class="btn-close-modal" onclick="closeModal(\'mem-modal\')">Close</button>'
+      + '<button class="btn-approve" style="margin-left:8px;" onclick="openEditMember()">\u270F Edit Member</button>'
+      + '</div>';
+
+    var modal = document.getElementById('mem-modal');
+    if (modal) modal.style.display = 'flex';
+  }
+
+  /* ── Role change: confirm dialog → backend → audit log ── */
+  function confirmRoleChange(m, newRole) {
+    var isPromote = newRole === 'Officer';
+    var verb = isPromote ? 'promote' : 'revoke the officer status of';
+    var name = m.firstName + ' ' + m.lastName + ' (' + m.username + ')';
+    showConfirm('Confirm Role Change', 'Are you sure you want to ' + verb + ' ' + name + '?\n\nThis change will be logged in the Audit Log.', function() {
+      var btn = event && event.target ? event.target : null;
+      if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; }
+
+      var adminName = '';
+      try { adminName = localStorage.getItem('campuscoop_admin_name') || localStorage.getItem('campuscoop_role') || ''; } catch(e) {}
+
+      google.script.run
+        .withSuccessHandler(function(r) {
+          if (r && r.success) {
+            showToast('\u2713 ' + (r.message || name + ' role updated.'));
+            closeModal('mem-modal');
+            if (typeof loadMembers === 'function') loadMembers();
+            if (typeof loadAccountsPage === 'function') loadAccountsPage();
+          } else {
+            showToast('Error: ' + ((r && r.message) || 'Role update failed.'));
+          }
+        })
+        .withFailureHandler(function(e) { showToast('Server error: ' + e.message); })
+        .changeMemberRole(m.username, newRole, adminName);
+    });
+  }
+
+  /* ── Admin-triggered password reset email ── */
+  function sendMemberReset(m) {
+    showConfirm('Send Reset Link', 'Send a password reset link to ' + (m.firstName || 'this member') + ' (' + (m.email || m.username) + ')?\n\nThe member will receive a link by email to set a new password.', function() {
+      google.script.run
+        .withSuccessHandler(function(r) {
+          showToast(r && r.success ? ('\u2713 ' + r.message) : ('Error: ' + ((r && r.message) || 'Could not send reset link.')));
+        })
+        .withFailureHandler(function(e) { showToast('Server error: ' + e.message); })
+        .sendMemberPasswordReset(m.username);
+    });
+  }
+
+  /* ── Edit mode: replace modal body with form ── */
+  function openEditMember() {
+    var m = window._editingMember;
+    if (!m) return;
+    var body = document.getElementById('mem-modal-body');
+    if (!body) return;
+
+    var inp = function(id, label, value, type) {
+      return '<div style="margin-bottom:10px;">'
+        + '<label style="font-size:11px;font-weight:600;color:#555;text-transform:uppercase;display:block;margin-bottom:4px;">' + label + '</label>'
+        + '<input id="em-' + id + '" type="' + (type||'text') + '" value="' + (value||'').replace(/"/g,'"') + '"'
+        + ' style="width:100%;padding:8px 10px;border:1px solid #E0DDD6;border-radius:6px;font-size:13px;font-family:inherit;box-sizing:border-box;"/>'
+        + '</div>';
+    };
+
+    body.innerHTML =
+      '<div class="modal-section">Edit member</div>'
+      + '<div class="detail-grid">'
+      + inp('firstName', 'First Name', m.firstName)
+      + inp('lastName', 'Last Name', m.lastName)
+      + inp('email', 'Email', m.email, 'email')
+      + inp('phone', 'Phone', m.phone)
+      + inp('department', 'Department', m.department)
+      + '<div style="margin-bottom:10px;">'
+        + '<label style="font-size:11px;font-weight:600;color:#555;text-transform:uppercase;display:block;margin-bottom:4px;">Member Type</label>'
+        + '<select id="em-memberType" style="width:100%;padding:8px 10px;border:1px solid #E0DDD6;border-radius:6px;font-size:13px;font-family:inherit;">'
+        + '<option value="Teacher"' + (m.memberType === 'Teacher' ? ' selected' : '') + '>Teacher</option>'
+        + '<option value="Job Order"' + (m.memberType === 'Job Order' ? ' selected' : '') + '>Job Order</option>'
+        + '</select>'
+        + '</div>'
+      + '<div style="margin-bottom:10px;">'
+        + '<label style="font-size:11px;font-weight:600;color:#555;text-transform:uppercase;display:block;margin-bottom:4px;">Status</label>'
+        + '<select id="em-status" style="width:100%;padding:8px 10px;border:1px solid #E0DDD6;border-radius:6px;font-size:13px;font-family:inherit;">'
+        + '<option value="Active"' + (m.status === 'Active' ? ' selected' : '') + '>Active</option>'
+        + '<option value="Inactive"' + (m.status === 'Inactive' ? ' selected' : '') + '>Inactive</option>'
+        + '<option value="Pending"' + (m.status === 'Pending' ? ' selected' : '') + '>Pending</option>'
+        + '</select>'
+        + '</div>'
+      + '</div>'
+      + '<div style="display:flex;gap:8px;margin-top:14px;">'
+      + '<button class="btn-close-modal" onclick="viewMember(window._editingMember)">Cancel</button>'
+      + '<button class="btn-approve" onclick="saveEditMember()">Save Changes</button>'
+      + '</div>';
+  }
+
+  function saveEditMember() {
+    var m = window._editingMember;
+    if (!m) return;
+    var data = {
+      username: m.username,
+      firstName: document.getElementById('em-firstName').value,
+      lastName: document.getElementById('em-lastName').value,
+      email: document.getElementById('em-email').value,
+      phone: document.getElementById('em-phone').value,
+      department: document.getElementById('em-department').value,
+      memberType: document.getElementById('em-memberType').value,
+      status: document.getElementById('em-status').value
+    };
+    google.script.run
+      .withSuccessHandler(function(r) {
+        if (r && r.success) {
+          showToast('\u2713 Member updated.');
+          closeModal('mem-modal');
+          if (typeof loadMembers === 'function') loadMembers();
+          if (typeof loadAccountsPage === 'function') loadAccountsPage();
+        } else {
+          showToast('Error: ' + ((r && r.message) || 'Update failed.'));
+        }
+      })
+      .withFailureHandler(function(e) { showToast('Server error: ' + e.message); })
+      .updateMemberByAdmin(m.username, data);
+  }
+
+  function escHtml(s) { return String(s || '').replace(/&/g,'&').replace(/</g,'<').replace(/>/g,'>').replace(/"/g,'"').replace(/'/g,'''); }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    loadMembers();
+  });
+</script>
+<div id="toast" style="position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:#1C2B3A;color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;display:none;z-index:999;white-space:nowrap;font-family:'Plus Jakarta Sans',sans-serif;"></div>

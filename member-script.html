@@ -1,0 +1,2428 @@
+<script>
+  /* ── Load member dashboard data ── */
+  function loadMemberDashboard() {
+    var member = null;
+    try { member = JSON.parse(localStorage.getItem('campuscoop_current_member')); } catch (e) { }
+    
+    console.log('Loaded member from localStorage:', member);
+    
+    var base = document.querySelector('base');
+    var href = base ? base.href : '';
+
+    if (!member || !member.username) {
+      window.top.location.href = href + '?page=login';
+      return;
+    }
+
+    // Temporarily skip profile setup check
+    // if (member.isProfileComplete === false) {
+    //   window.top.location.href = href + '?page=profile-setup';
+    //   return;
+    // }
+
+    // Update sidebar name
+    var sfName = document.getElementById('sf-name');
+    var sfRole = document.getElementById('sf-role');
+    var sfAv = document.getElementById('sf-av');
+    var badge = document.getElementById('member-badge');
+    if (sfName) sfName.textContent = member.firstName + ' ' + member.lastName;
+    if (sfRole) sfRole.textContent = member.memberType || 'Member';
+    if (sfAv) sfAv.textContent = (member.firstName || 'M').charAt(0);
+    if (badge) badge.textContent = member.memberType || 'Member';
+
+    // Store capital globally for CBU widget
+    window._memberCapital = Number(member.capital) || 0;
+    
+    // Update CBU display immediately
+    var cbuDisp = document.getElementById('m-cbu-display');
+    if (cbuDisp) cbuDisp.textContent = fmt(window._memberCapital);
+
+    // Update profile page
+    var pfId = document.getElementById('prof-id');
+    var pfType = document.getElementById('prof-type');
+    var pfCap = document.getElementById('prof-cap');
+    var pfDate = document.getElementById('prof-date');
+    var pfName = document.getElementById('prof-fullname');
+    var pfEmail = document.getElementById('prof-email-display');
+    var pfDept = document.getElementById('prof-dept');
+    
+    if (pfId) pfId.textContent = member.username || '\u2014';
+    if (pfType) pfType.textContent = member.memberType || '\u2014';
+    if (pfCap) pfCap.textContent = member.capital ? '\u20B1' + Number(member.capital).toLocaleString() : '\u20B10';
+    if (pfDate) pfDate.textContent = member.dateJoined || '\u2014';
+    if (pfName) pfName.textContent = (member.firstName || '') + ' ' + (member.lastName || '');
+    if (pfEmail) pfEmail.textContent = member.email || '\u2014';
+    if (pfDept) pfDept.textContent = member.department || '\u2014';
+    // Populate editable fields
+    var emailIn = document.getElementById('prof-email-input');
+    var phoneIn = document.getElementById('prof-phone-input');
+    if (emailIn) emailIn.value = member.email || '';
+    if (phoneIn) phoneIn.value = member.phone || '';
+
+    // Load CBU history
+    renderCbuHistory();
+
+    // Apply loan eligibility rules based on member type
+    applyEligibilityRules(member.memberType);
+
+    // Load loans
+    google.script.run
+      .withSuccessHandler(function (r) {
+        if (!r || !r.success) return;
+        var loans = r.loans || [];
+        var active = loans.filter(function (l) {
+          return l.status === 'Active';
+        });
+        window._allActiveLoans = active; // Used by subCOM/subSTL/subREG to block new applications
+        var totalBal = 0, totalMonthly = 0;
+        active.forEach(function (l) {
+          totalBal += l.balance;
+          // For Regular (diminishing) loans, recalculate the CURRENT period's
+          // payment: fixed principal portion + interest on the remaining balance.
+          // For all other loan types, the monthly amount is flat so use stored value.
+          var currentMonthly;
+          if (l.loanType === 'Regular' && l.term > 0) {
+            var principal = Math.round(l.amount / l.term);
+            var interest  = Math.round(l.balance * 0.01);
+            currentMonthly = principal + interest;
+          } else {
+            currentMonthly = l.monthly;
+          }
+          totalMonthly += currentMonthly;
+        });
+
+      // Populate My Loans summary cards
+        var activeCnt = document.getElementById('loans-active-count');
+        var totalBal2 = document.getElementById('loans-total-bal');
+        var outstandingBalEl = document.getElementById('loans-outstanding-bal');
+        var monthlyDue2 = document.getElementById('loans-monthly-due');
+        var paidCnt = document.getElementById('loans-paid-count');
+        var totalAmountGranted = loans.reduce(function(sum, l) { return sum + (l.amount || 0); }, 0);
+        var paidLoans = loans.filter(function(l){ return l.status === 'Paid'; });
+        if (activeCnt) activeCnt.textContent = active.length;
+        if (totalBal2) totalBal2.textContent = fmt(totalAmountGranted);
+        if (outstandingBalEl) outstandingBalEl.textContent = fmt(totalBal);
+        if (monthlyDue2) monthlyDue2.textContent = fmt(totalMonthly);
+        if (paidCnt) paidCnt.textContent = paidLoans.length;
+
+        // Store for My Loans page and render
+        loansData = loans;
+        renderLoans('all');
+        renderLedger();
+        renderHomeActiveLoans(loans, window._memberCapital);
+        
+        // Force carousel render with a delay to ensure DOM is ready
+        setTimeout(function() {
+          renderLoanCarousel(loans, window._memberCapital, member.memberType);
+        }, 100);
+
+
+        var ac = document.getElementById('m-active-count');
+        var mt = document.getElementById('m-monthly-total');
+        var bt = document.getElementById('m-balance-total');
+        if (ac) ac.textContent = active.length;
+        if (mt) mt.textContent = fmt(totalMonthly);
+        if (bt) bt.textContent = fmt(totalBal);
+
+        // ── Populate "Next payment due" section ──
+        // Use the first active loan
+        if (active.length > 0) {
+          var l = active[0];
+          var npLoan = document.getElementById('np-loan');
+          var npPrin = document.getElementById('np-principal');
+          var npInt = document.getElementById('np-interest');
+          var npTotal = document.getElementById('np-total');
+          var npBadge = document.getElementById('np-badge');
+
+          var principal, interest, totalDue;
+
+          if (l.loanType === 'Regular') {
+            // Diminishing: principal is fixed, interest on remaining balance
+            principal = Math.round(l.amount / l.term);
+            interest = Math.round(l.balance * 0.01);
+            totalDue = principal + interest;
+          } else if (l.loanType === 'Commodity') {
+            principal = Math.round(l.amount / l.term);
+            interest = Math.round(l.monthly - principal);
+            totalDue = l.monthly;
+          } else {
+            // Short Term: flat 6%, split evenly each month
+            var totalInterest = Math.round(l.amount * 0.06);
+            interest = Math.round(totalInterest / l.term);
+            principal = l.monthly - interest;
+            totalDue = l.monthly;
+          }
+
+          if (npLoan) npLoan.textContent = l.loanType + ' Loan';
+          if (npPrin) npPrin.textContent = fmt(principal);
+          if (npInt) npInt.textContent = fmt(interest);
+          if (npTotal) npTotal.textContent = fmt(totalDue);
+          if (npBadge) npBadge.textContent = 'Monthly due';
+          if (npBadge) npBadge.style.color = '#185FA5';
+          if (npBadge) npBadge.style.background = '#E6F1FB';
+
+          // Wire up Pay Now modal data
+          payData.loanType = l.loanType;
+          payData.principal = principal;
+          payData.interest = interest;
+          payData.totalDue = totalDue;
+          payData.balance = l.balance;
+          var monthNum = (l.totalToPay && l.monthly) ? Math.floor((l.totalToPay - l.balance) / l.monthly) + 1 : 1;
+          if (monthNum < 1) monthNum = 1;
+          payData.monthNum = monthNum;
+        }
+
+        // Render active loans list
+        var list = document.getElementById('m-loans-list');
+        if (!list) return;
+        if (active.length === 0) {
+          list.innerHTML =
+            '<div style="font-size:32px;margin-bottom:10px;">&#128203;</div>'
+            + '<div style="font-size:13px;font-weight:600;color:#555;margin-bottom:5px;">No active loans yet</div>'
+            + '<div style="font-size:12px;color:#aaa;line-height:1.6;">Apply for a loan below and it will appear here once approved.</div>';
+          list.style.textAlign = 'center';
+          list.style.padding = '40px';
+        } else {
+          list.style.textAlign = '';
+          list.style.padding = '0';
+          var html = '';
+          active.forEach(function (l) {
+            var pct = l.totalToPay > 0
+              ? Math.round((1 - l.balance / l.totalToPay) * 100) : 0;
+            var color = l.loanType === 'Regular' ? '#3B6D11'
+              : l.loanType === 'Commodity' ? '#6B3B9A' : '#185FA5';
+            html += '<div style="padding:16px 20px;border-bottom:0.5px solid #F0EDE8;display:flex;align-items:center;justify-content:space-between;">';
+            html += '<div>';
+            html += '<div style="font-size:13px;font-weight:600;">' + l.loanType + ' Loan</div>';
+            html += '<div style="font-size:11px;color:#888;margin-top:2px;">Started ' + l.startDate + ' &middot; ' + l.term + ' months</div>';
+            html += '</div>';
+            html += '<div style="text-align:right;">';
+            html += '<div style="font-size:14px;font-weight:600;font-family:\'DM Mono\',monospace;">' + fmt(l.balance) + '</div>';
+            html += '<div style="font-size:11px;color:' + color + ';margin-top:2px;">' + fmt(l.monthly) + '/mo &middot; ' + pct + '% paid</div>';
+            html += '</div>';
+            html += '</div>';
+          });
+          list.innerHTML = html;
+        }
+
+        // Load pending applications count
+        var pending = (r.apps || []).filter(function (a) {
+          return a.status === 'Pending';
+        });
+        var pc = document.getElementById('m-pending-count');
+        if (pc) pc.textContent = pending.length;
+
+        // Load Payments
+        allMemberPayments = r.payments || [];
+        renderMemberPayments();
+
+        // Show filter buttons only for loan types the borrower has
+        var activeLoanTypes = {};
+        active.forEach(function(l) { activeLoanTypes[l.loanType] = true; });
+        var btnMap = { 'Regular': 'pf-btn-regular', 'Short Term': 'pf-btn-stl', 'Commodity': 'pf-btn-commodity' };
+        Object.keys(btnMap).forEach(function(type) {
+          var btn = document.getElementById(btnMap[type]);
+          if (btn) {
+            var show = activeLoanTypes[type] || false;
+            btn.style.display = show ? '' : 'none';
+          }
+        });
+        // Keep the "All" tab selected by default
+        document.querySelectorAll('.pf-btn').forEach(function(b) { b.classList.remove('on'); });
+        var allBtn = document.getElementById('pf-btn-all');
+        if (allBtn) allBtn.classList.add('on');
+
+        // ── Populate Commodity page with active commodity loan ──
+        var comLoans = loans.filter(function(l){ return l.loanType === 'Commodity'; });
+        var activeCom = comLoans.filter(function(l){ return l.status === 'Active'; });
+        if (activeCom.length > 0) {
+          var cl = activeCom[0];
+          var comCards = document.querySelectorAll('#page-commodity .card-val');
+          if (comCards.length >= 4) {
+            comCards[0].textContent = fmt(cl.amount);
+            comCards[0].style.color = '#1a1a1a';
+            comCards[1].textContent = fmt(cl.monthly);
+            comCards[1].style.color = '#1a1a1a';
+            comCards[2].textContent = fmt(cl.balance);
+            comCards[2].style.color = '#1a1a1a';
+            comCards[3].textContent = cl.status;
+            comCards[3].style.color = '#6B3B9A';
+            comCards[3].style.fontSize = '16px';
+          }
+          var comSubs = document.querySelectorAll('#page-commodity .card-sub');
+          if (comSubs.length >= 4) {
+            comSubs[0].textContent = cl.loanId || 'Active';
+            comSubs[1].textContent = cl.term + ' month' + (cl.term > 1 ? 's' : '');
+            comSubs[2].textContent = 'Remaining';
+            comSubs[3].textContent = 'Started ' + (cl.startDate || '\u2014');
+          }
+          // Replace the empty state in schedule-wrap with a simple payment schedule
+          var schedWrap = document.querySelector('#page-commodity .schedule-wrap');
+          if (schedWrap) {
+            var pct = cl.totalToPay > 0 ? Math.round((1 - cl.balance / cl.totalToPay) * 100) : 0;
+            var monthsPd = Math.max(0, Math.round((cl.totalToPay - cl.balance) / (cl.monthly || 1)));
+            var schHtml = '<div class="schedule-hdr"><span class="schedule-hdr-title">Payment schedule</span>'
+              + '<span style="font-size:11px;color:#6B3B9A;background:#F3EAFB;padding:3px 9px;border-radius:10px;">'
+              + pct + '% paid</span></div>';
+            schHtml += '<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+              + '<thead><tr style="background:#FAFAF8;"><th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.06em;">Month</th>'
+              + '<th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:600;color:#888;text-transform:uppercase;">Principal</th>'
+              + '<th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:600;color:#888;text-transform:uppercase;">Interest</th>'
+              + '<th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:600;color:#888;text-transform:uppercase;">Total</th>'
+              + '<th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:600;color:#888;text-transform:uppercase;">Status</th></tr></thead><tbody>';
+            var comPrin = Math.round(cl.amount / cl.term);
+            var comInt = cl.monthly - comPrin;
+            var releaseDate = new Date(cl.startDate);
+            var monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+            for (var m = 1; m <= cl.term; m++) {
+              var dueDate = new Date(releaseDate);
+              dueDate.setMonth(dueDate.getMonth() + m);
+              var dateStr = monthNames[dueDate.getMonth()] + ' ' + dueDate.getDate() + ', ' + dueDate.getFullYear();
+
+              var stBg = m <= monthsPd ? '#EAF3DE' : m === monthsPd + 1 ? '#FAEEDA' : '#fff';
+              var stLabel = m <= monthsPd
+                ? '<span style="font-size:10px;background:#EAF3DE;color:#3B6D11;padding:2px 7px;border-radius:10px;font-weight:600;">Paid</span>'
+                : m === monthsPd + 1
+                ? '<span style="font-size:10px;background:#FAEEDA;color:#854F0B;padding:2px 7px;border-radius:10px;font-weight:600;">Due</span>'
+                : '<span style="font-size:11px;color:#ccc;">Upcoming</span>';
+              schHtml += '<tr style="background:' + stBg + ';">'
+                + '<td style="padding:10px 14px;border-bottom:0.5px solid #F0EDE8;">' + dateStr + '</td>'
+                + '<td style="padding:10px 14px;border-bottom:0.5px solid #F0EDE8;font-family:DM Mono,monospace;">' + fmt(comPrin) + '</td>'
+                + '<td style="padding:10px 14px;border-bottom:0.5px solid #F0EDE8;font-family:DM Mono,monospace;color:#6B3B9A;">' + fmt(comInt) + '</td>'
+                + '<td style="padding:10px 14px;border-bottom:0.5px solid #F0EDE8;font-family:DM Mono,monospace;font-weight:600;">' + fmt(cl.monthly) + '</td>'
+                + '<td style="padding:10px 14px;border-bottom:0.5px solid #F0EDE8;">' + stLabel + '</td>'
+                + '</tr>';
+            }
+            schHtml += '</tbody></table>';
+            schedWrap.innerHTML = schHtml;
+          }
+        }
+
+        // ── Store all active loans for early payment loan selector ──
+        window._allActiveLoans = active;
+
+        // ── Render Analytics page ──
+        renderAnalytics(loans, allMemberPayments);
+      })
+      .withFailureHandler(function () { })
+      .getMemberDashboardData(member.username);
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    loadMemberDashboard();
+    loadDedDefaults();
+  });
+
+  /* ── Toggle sidebar (mobile drawer) ── */
+  function toggleSidebar() {
+    var sidebar = document.querySelector('.sidebar');
+    var backdrop = document.getElementById('sidebar-backdrop');
+    if (!sidebar) return;
+    var isOpen = sidebar.classList.contains('open');
+    if (isOpen) {
+      sidebar.classList.remove('open');
+      if (backdrop) backdrop.classList.remove('show');
+    } else {
+      sidebar.classList.add('open');
+      if (backdrop) backdrop.classList.add('show');
+    }
+  }
+
+  /* ── Fullscreen toggle ── */
+  function toggleFullscreen() {
+    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+      var el = document.documentElement;
+      if (el.requestFullscreen) el.requestFullscreen();
+      else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    } else {
+      if (document.exitFullscreen) document.exitFullscreen();
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+    }
+  }
+
+  /* ── Currency format helper ── */
+  function fmt(n) {
+    if (typeof n !== 'number' || isNaN(n)) n = 0;
+    return '\u20B1' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  var ALL_PAGES = [
+    'dashboard', 'shortterm', 'regular',
+    'commodity', 'profile', 'loans', 'payments', 'analytics', 'ledger'
+  ];
+
+  function switchPage(page, btn) {
+    ALL_PAGES.forEach(function (p) {
+      var el = document.getElementById('page-' + p);
+      if (el) el.style.display = p === page ? 'block' : 'none';
+    });
+
+    // Clear old nav active states
+    document.querySelectorAll('.nav-item').forEach(function (el) {
+      el.classList.remove('active');
+    });
+    document.querySelectorAll('.ps-btn').forEach(function (b) {
+      b.classList.remove('on');
+    });
+    // Clear bottom nav active
+    document.querySelectorAll('.gc-nav-item').forEach(function (el) {
+      el.classList.remove('active');
+    });
+    // Clear quick actions active
+    document.querySelectorAll('.gc-qa-item').forEach(function (el) {
+      el.classList.remove('active');
+    });
+
+    // Activate sidebar nav item (hidden but JS compat)
+    var navEl = document.getElementById('nav-' + page);
+    if (navEl) navEl.classList.add('active');
+    if (btn && btn.classList) btn.classList.add('on');
+
+    // Activate bottom nav item
+    // Loan sub-pages map to the "Loans" tab
+    var bottomMap = {
+      dashboard: 'gc-nav-dashboard',
+      loans:     'gc-nav-loans',
+      shortterm: 'gc-nav-loans',
+      regular:   'gc-nav-loans',
+      commodity: 'gc-nav-loans',
+      ledger:    'gc-nav-ledger',
+      payments:  'gc-nav-payments',
+      analytics: 'gc-nav-analytics',
+      profile:   'gc-nav-profile'
+    };
+    var bottomId = bottomMap[page] || 'gc-nav-dashboard';
+    var bottomEl = document.getElementById(bottomId);
+    if (bottomEl) bottomEl.classList.add('active');
+
+    // Activate quick-action item if it exists (dashboard items)
+    var qaMap = {
+      dashboard: 'nav-dashboard',
+      loans:     'nav-loans',
+      payments:  'nav-payments',
+      profile:   'nav-profile'
+    };
+    var qaId = qaMap[page];
+    if (qaId) {
+      var qaEl = document.getElementById(qaId);
+      if (qaEl && qaEl.classList.contains('gc-qa-item')) qaEl.classList.add('active');
+    }
+
+    var titles = {
+      dashboard: 'My Dashboard',
+      shortterm: 'Short Term Loan',
+      regular:   'Regular Loan',
+      commodity: 'Commodity Loan',
+      profile:   'My Profile',
+      loans:     'My Loans',
+      ledger:    'Loan Ledger',
+      payments:  'My Payments',
+      analytics: 'Analytics'
+    };
+    var t = document.getElementById('page-title');
+    if (t) t.textContent = titles[page] || 'My Dashboard';
+    var pageBar = document.getElementById('gc-page-bar');
+    if (pageBar) {
+      pageBar.style.display = (page === 'dashboard') ? 'none' : 'flex';
+    }
+
+    // Scroll content area to top
+    window.scrollTo(0, 0);
+    var contentEl = document.getElementById('gc-content');
+    if (contentEl) contentEl.scrollTop = 0;
+
+    // Hide the header on all tabs except the dashboard so each section fills the full screen
+    var headerEl = document.querySelector('.gc-header');
+    if (headerEl) {
+      if (page === 'dashboard') {
+        headerEl.style.display = '';
+        headerEl.style.maxHeight = '';
+        headerEl.style.overflow = '';
+        headerEl.style.padding = '';
+      } else {
+        headerEl.style.display = 'none';
+      }
+    }
+
+    // Close sidebar on mobile after navigating (kept for JS compat)
+    var sidebar = document.querySelector('.sidebar');
+    var backdrop = document.getElementById('sidebar-backdrop');
+    if (sidebar && sidebar.classList.contains('open')) {
+      sidebar.classList.remove('open');
+      if (backdrop) backdrop.classList.remove('show');
+    }
+
+    // Auto-refresh payments when navigating to payments page
+    if (page === 'payments' && typeof renderMemberPayments === 'function') {
+      // Reset filter to "All"
+      document.querySelectorAll('.pf-btn').forEach(function(b) { b.classList.remove('on'); });
+      var allBtn = document.getElementById('pf-btn-all');
+      if (allBtn) allBtn.classList.add('on');
+      renderMemberPayments('all');
+    }
+  }
+
+  /* ── Loan eligibility by member type ── */
+  function applyEligibilityRules(memberType) {
+    var isJobOrder = (memberType || '').toString().toLowerCase().indexOf('job') !== -1
+      || (memberType || '').toString().toLowerCase() === 'job order';
+    var isFaculty = (memberType || '').toString().toLowerCase().indexOf('faculty') !== -1
+      || (memberType || '').toString().toLowerCase().indexOf('teacher') !== -1;
+
+    if (isJobOrder) {
+      // Hide Regular Loan in sidebar for Job Order
+      var navReg = document.getElementById('nav-regular');
+      if (navReg) navReg.style.display = 'none';
+
+      // Grey out Regular apply card on dashboard for Job Order
+      var applyReg = document.getElementById('apply-card-regular');
+      if (applyReg) {
+        applyReg.style.opacity = '0.45';
+        applyReg.style.cursor = 'not-allowed';
+        applyReg.style.pointerEvents = 'none';
+        applyReg.title = 'Regular Loan is for Faculty only';
+        // Add a lock badge
+        var badge2 = applyReg.querySelector('.apply-max');
+        if (badge2) badge2.innerHTML = '&#128274; Faculty only';
+        badge2.style.color = '#aaa';
+      }
+    }
+  }
+
+  function showToast(msg) {
+    var t = document.getElementById('toast');
+    if (!t) return;
+    t.textContent = msg;
+    t.style.display = 'block';
+    clearTimeout(window._tt);
+    window._tt = setTimeout(function () {
+      t.style.display = 'none';
+    }, 2500);
+  }
+
+  var fmt = function (n) {
+    if (typeof n !== 'number' || isNaN(n)) n = 0;
+    return '\u20B1' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  function openM(t) {
+    var el = document.getElementById('ov-' + t);
+    if (el) el.classList.add('on');
+
+    // Apply CBU-based max limits dynamically
+    var maxL = window._maxLoanable || { stl: 15000, reg: 200000, com: 5000 };
+    var capital = window._memberCapital || 0;
+    var fmtEl = fmt;
+
+    if (t === 'stl') {
+      var stlSlider = document.getElementById('s-amt');
+      var stlMax = maxL.stl;
+      if (stlSlider) {
+        stlSlider.max = stlMax;
+        if (parseFloat(stlSlider.value) > stlMax) stlSlider.value = stlMax;
+      }
+      // Update the static hint text
+      var stlHints = document.querySelectorAll('#stl-form .fhint');
+      if (stlHints[0]) stlHints[0].textContent = 'Minimum \u20B11,000 \u00B7 Maximum ' + fmtEl(stlMax) + ' (based on your CBU)';
+      // Update modal CBU banner
+      var mbCbu = document.getElementById('stl-modal-cbu');
+      var mbMax = document.getElementById('stl-modal-max');
+      if (mbCbu) mbCbu.textContent = fmtEl(capital);
+      if (mbMax) mbMax.textContent = fmtEl(stlMax);
+      calcSTL();
+    }
+    if (t === 'reg') {
+      var regSlider = document.getElementById('r-amt');
+      var regMax = maxL.reg;
+      if (regSlider) {
+        regSlider.max = regMax;
+        if (parseFloat(regSlider.value) > regMax) regSlider.value = regMax;
+      }
+      var regHints = document.querySelectorAll('#reg-form .fhint');
+      if (regHints[0]) regHints[0].textContent = 'Minimum \u20B15,000 \u00B7 Maximum ' + fmtEl(regMax) + ' (based on your CBU)';
+      var mbCbuR = document.getElementById('reg-modal-cbu');
+      var mbMaxR = document.getElementById('reg-modal-max');
+      if (mbCbuR) mbCbuR.textContent = fmtEl(capital);
+      if (mbMaxR) mbMaxR.textContent = fmtEl(regMax);
+      calcREG();
+    }
+    if (t === 'com') {
+      var comSlider = document.getElementById('c-amt');
+      var comMax = maxL.com;
+      if (comSlider) {
+        comSlider.max = comMax;
+        if (parseFloat(comSlider.value) > comMax) comSlider.value = comMax;
+      }
+      var comHints = document.querySelectorAll('#com-form .fhint');
+      if (comHints[0]) comHints[0].textContent = 'Minimum \u20B1500 \u00B7 Maximum ' + fmtEl(comMax) + ' (based on your CBU)';
+      var mbCbuC = document.getElementById('com-modal-cbu');
+      var mbMaxC = document.getElementById('com-modal-max');
+      if (mbCbuC) mbCbuC.textContent = fmtEl(capital);
+      if (mbMaxC) mbMaxC.textContent = fmtEl(comMax);
+      calcCOM();
+    }
+  }
+
+  function closeM(t) {
+    var el = document.getElementById('ov-' + t);
+    if (el) el.classList.remove('on');
+    var ok = document.getElementById(t + '-ok');
+    var fm = document.getElementById(t + '-form');
+    if (ok) ok.style.display = 'none';
+    if (fm) fm.style.display = 'block';
+  }
+
+  function calcSTL() {
+    var a = +(document.getElementById('s-amt').value);
+    var m = +(document.getElementById('s-mo').value);
+    var av = document.getElementById('s-amt-v');
+    var mv = document.getElementById('s-mo-v');
+    if (av) av.textContent = fmt(a);
+    if (mv) mv.textContent = m + ' month' + (m > 1 ? 's' : '');
+    var mo = document.getElementById('s-monthly');
+    var it = document.getElementById('s-int');
+    var to = document.getElementById('s-total');
+    if (mo) mo.textContent = fmt(a * 1.06 / m);
+    if (it) it.textContent = fmt(a * 0.06);
+    if (to) to.textContent = fmt(a * 1.06);
+    updateDedPreviewSTL(a);
+  }
+
+  function calcREG() {
+    var a = +(document.getElementById('r-amt').value);
+    var m = +(document.getElementById('r-mo').value);
+    var av = document.getElementById('r-amt-v');
+    var mv = document.getElementById('r-mo-v');
+    if (av) av.textContent = fmt(a);
+    if (mv) mv.textContent = m + ' months';
+    var p = a / m;
+    var i = a * 0.01;
+    var pr = document.getElementById('r-prin');
+    var ri = document.getElementById('r-int');
+    var rt = document.getElementById('r-tot');
+    if (pr) pr.textContent = fmt(p);
+    if (ri) ri.textContent = fmt(i);
+    if (rt) rt.textContent = fmt(p + i);
+    updateDedPreviewREG(a);
+  }
+
+  function calcCOM() {
+    var a = +(document.getElementById('c-amt').value);
+    var m = +(document.getElementById('c-mo').value);
+    var av = document.getElementById('c-amt-v');
+    var mv = document.getElementById('c-mo-v');
+    if (av) av.textContent = fmt(a);
+    if (mv) mv.textContent = m + ' month' + (m > 1 ? 's' : '');
+    var totalInt = Math.round(a * 0.01 * m);
+    var totalPay = a + totalInt;
+    var monthly = Math.round(totalPay / m);
+    var mo = document.getElementById('c-monthly');
+    var it = document.getElementById('c-int');
+    var to = document.getElementById('c-total');
+    if (mo) mo.textContent = fmt(monthly);
+    if (it) it.textContent = fmt(totalInt);
+    if (to) to.textContent = fmt(totalPay);
+    updateDedPreviewCOM(a);
+  }
+
+  function subCOM() {
+    var member = null;
+    try { member = JSON.parse(localStorage.getItem('campuscoop_current_member')); } catch (e) { }
+    if (!member) { showToast('Please log in first.'); return; }
+    var hasActiveCom = (window._allActiveLoans || []).some(function(l){ return l.loanType === 'Commodity'; });
+    if (hasActiveCom) {
+      showToast('You already have an active Commodity Loan.');
+      return;
+    }
+    var amt = +(document.getElementById('c-amt').value);
+    var mo = +(document.getElementById('c-mo').value);
+    var btn = document.querySelector('#com-form .bsub');
+    if (btn) { btn.disabled = true; btn.textContent = 'Submitting...'; }
+    
+    console.log('Submitting Commodity loan with member data:', { 
+      memberId: member.username, 
+      firstName: member.firstName, 
+      lastName: member.lastName 
+    });
+    
+    google.script.run
+      .withSuccessHandler(function (r) {
+        if (r && r.success) {
+          var ok = document.getElementById('com-ok');
+          var fm = document.getElementById('com-form');
+          if (fm) fm.style.display = 'none';
+          if (ok) ok.style.display = 'block';
+        } else {
+          showToast('Error: ' + (r && r.message ? r.message : 'Failed to submit.'));
+        }
+        if (btn) { btn.disabled = false; btn.textContent = 'Submit Application'; }
+      })
+      .withFailureHandler(function (e) {
+        showToast('Error: ' + e.message);
+        if (btn) { btn.disabled = false; btn.textContent = 'Submit Application'; }
+      })
+      .submitLoanApplication({
+        memberId: member.username || '',
+        firstName: member.firstName || '',
+        lastName: member.lastName || '',
+        loanType: 'Commodity',
+        amount: amt,
+        term: mo
+      });
+  }
+
+  function subSTL() {
+    var member = null;
+    try { member = JSON.parse(localStorage.getItem('campuscoop_current_member')); } catch (e) { }
+    if (!member) { showToast('Please log in first.'); return; }
+    var hasActiveStl = (window._allActiveLoans || []).some(function(l){ return l.loanType === 'Short Term'; });
+    if (hasActiveStl) {
+      showToast('You already have an active Short Term Loan.');
+      return;
+    }
+    var amt = +(document.getElementById('s-amt').value);
+    var mo = +(document.getElementById('s-mo').value);
+    var btn = document.querySelector('#stl-form .bsub');
+    if (btn) { btn.disabled = true; btn.textContent = 'Submitting...'; }
+    google.script.run
+      .withSuccessHandler(function (r) {
+        if (r && r.success) {
+          var ok = document.getElementById('stl-ok');
+          var fm = document.getElementById('stl-form');
+          if (fm) fm.style.display = 'none';
+          if (ok) ok.style.display = 'block';
+        } else {
+          showToast('Error: ' + (r && r.message ? r.message : 'Failed to submit.'));
+        }
+        if (btn) { btn.disabled = false; btn.textContent = 'Submit Application'; }
+      })
+      .withFailureHandler(function (e) {
+        showToast('Error: ' + e.message);
+        if (btn) { btn.disabled = false; btn.textContent = 'Submit Application'; }
+      })
+      .submitLoanApplication({
+        memberId: member.username || '',
+        firstName: member.firstName || '',
+        lastName: member.lastName || '',
+        loanType: 'Short Term',
+        amount: amt,
+        term: mo
+      });
+  }
+
+  function subREG() {
+    var member = null;
+    try { member = JSON.parse(localStorage.getItem('campuscoop_current_member')); } catch (e) { }
+    if (!member) { showToast('Please log in first.'); return; }
+    var hasActiveReg = (window._allActiveLoans || []).some(function(l){ return l.loanType === 'Regular'; });
+    if (hasActiveReg) {
+      showToast('You already have an active Regular Loan.');
+      return;
+    }
+    // Eligibility check - Faculty and Teachers can apply for Regular loans
+    var memberTypeLower = (member.memberType || '').toString().toLowerCase();
+    var isEligibleForRegular = memberTypeLower.indexOf('faculty') !== -1 || memberTypeLower.indexOf('teacher') !== -1;
+    
+    if (!isEligibleForRegular) {
+      showToast('Regular Loan is for Faculty only. You are not eligible.');
+      return;
+    }
+    var amt = +(document.getElementById('r-amt').value);
+    var mo = +(document.getElementById('r-mo').value);
+    var btn = document.querySelector('#reg-form .bsub');
+    if (btn) { btn.disabled = true; btn.textContent = 'Submitting...'; }
+    google.script.run
+      .withSuccessHandler(function (r) {
+        if (r && r.success) {
+          var ok = document.getElementById('reg-ok');
+          var fm = document.getElementById('reg-form');
+          if (fm) fm.style.display = 'none';
+          if (ok) ok.style.display = 'block';
+        } else {
+          showToast('Error: ' + (r && r.message ? r.message : 'Failed to submit.'));
+        }
+        if (btn) { btn.disabled = false; btn.textContent = 'Submit Application'; }
+      })
+      .withFailureHandler(function (e) {
+        showToast('Error: ' + e.message);
+        if (btn) { btn.disabled = false; btn.textContent = 'Submit Application'; }
+      })
+      .submitLoanApplication({
+        memberId: member.username || '',
+        firstName: member.firstName || '',
+        lastName: member.lastName || '',
+        loanType: 'Regular',
+        amount: amt,
+        term: mo
+      });
+  }
+
+  var payData = {
+    loanType: '',
+    principal: 0,
+    interest: 0,
+    totalDue: 0,
+    balance: 0,
+    dueDate: '',
+    monthNum: 0
+  };
+
+  /* ── Open modal — always resets to Step 1 ── */
+  function openPayModal() {
+    var d = new Date();
+    var dd = d.toISOString().split('T')[0];
+    var el = document.getElementById('pay-date');
+    if (el) el.value = dd;
+    var amtEl = document.getElementById('pay-amount');
+    if (amtEl) amtEl.value = payData.totalDue;
+
+    // Reset month counter to 1
+    var nmEl = document.getElementById('pay-num-months');
+    if (nmEl) nmEl.value = 1;
+    setPayMonths(1);
+
+    // Fill modal display values
+    var lt = document.getElementById('modal-loan-type');
+    var dd2 = document.getElementById('modal-due-date');
+    var pr = document.getElementById('modal-principal');
+    var it = document.getElementById('modal-interest');
+    var td = document.getElementById('modal-total-due');
+    var ah = document.getElementById('pay-amount-hint');
+    if (lt) lt.textContent = payData.loanType || '\u2014';
+    if (dd2) dd2.textContent = payData.dueDate || '\u2014';
+    if (pr) pr.textContent = payData.principal ? '\u20B1' + Math.round(payData.principal).toLocaleString() : '\u2014';
+    if (it) it.textContent = payData.interest ? '\u20B1' + Math.round(payData.interest).toLocaleString() : '\u2014';
+    if (td) td.textContent = payData.totalDue ? '\u20B1' + Math.round(payData.totalDue).toLocaleString() : '\u2014';
+    if (ah) ah.textContent = 'Monthly due: \u20B1' + Math.round(payData.totalDue).toLocaleString()
+      + ' \u00B7 Balance: \u20B1' + Math.round(payData.balance).toLocaleString();
+
+    // Set max on amount field to allow up to full balance
+    var amtInput = document.getElementById('pay-amount');
+    if (amtInput) {
+      amtInput.max = payData.balance;
+      amtInput.min = 1;
+    }
+
+    // Update quick-pay buttons
+    var qp1 = document.getElementById('qp-1mo');
+    var qp2 = document.getElementById('qp-2mo');
+    var qpFull = document.getElementById('qp-full');
+    if (qp1) qp1.textContent = '1 month (\u20B1' + Math.round(payData.totalDue).toLocaleString() + ')';
+    if (qp2) {
+      var twoMo = Math.min(payData.totalDue * 2, payData.balance);
+      qp2.textContent = '2 months (\u20B1' + Math.round(twoMo).toLocaleString() + ')';
+    }
+    if (qpFull) qpFull.textContent = 'Full balance (\u20B1' + Math.round(payData.balance).toLocaleString() + ')';
+
+    // Reset to Step 1
+    var s1 = document.getElementById('pay-step1');
+    var s2 = document.getElementById('pay-step2');
+    var su = document.getElementById('pay-success');
+    if (s1) s1.style.display = 'block';
+    if (s2) s2.style.display = 'none';
+    if (su) su.style.display = 'none';
+
+    updatePayConfirm();
+    window._payMonth = 'this'; // default to this month
+    document.getElementById('pay-overlay').classList.add('on');
+  }
+
+  function closePayModal() {
+    document.getElementById('pay-overlay').classList.remove('on');
+    var s1 = document.getElementById('pay-step1');
+    var s2 = document.getElementById('pay-step2');
+    var su = document.getElementById('pay-success');
+    if (s1) s1.style.display = 'block';
+    if (s2) s2.style.display = 'none';
+    if (su) su.style.display = 'none';
+    var notesEl = document.getElementById('pay-notes');
+    if (notesEl) notesEl.value = '';
+  }
+
+  /* ── Month picker ── */
+  function selectPayMonth(which) {
+    window._payMonth = which;
+    var btnThis = document.getElementById('mp-this');
+    var btnNext = document.getElementById('mp-next');
+    if (which === 'this') {
+      if (btnThis) { btnThis.style.border = '1.5px solid #3B6D11'; btnThis.style.background = '#EAF3DE'; btnThis.style.color = '#3B6D11'; }
+      if (btnNext) { btnNext.style.border = '1.5px solid #E0DDD6'; btnNext.style.background = '#fff'; btnNext.style.color = '#555'; }
+    } else {
+      if (btnNext) { btnNext.style.border = '1.5px solid #185FA5'; btnNext.style.background = '#E6F1FB'; btnNext.style.color = '#185FA5'; }
+      if (btnThis) { btnThis.style.border = '1.5px solid #E0DDD6'; btnThis.style.background = '#fff'; btnThis.style.color = '#555'; }
+    }
+  }
+
+  /* ── Step 1 → Step 2: select Counter or Salary Deduction ── */
+  function selectPaymentMethod(type) {
+    window._payType = type;
+    var s1 = document.getElementById('pay-step1');
+    var s2 = document.getElementById('pay-step2');
+    var badge = document.getElementById('chosen-method-badge');
+    if (s1) s1.style.display = 'none';
+    if (s2) s2.style.display = 'block';
+    if (badge) {
+      if (type === 'Counter') {
+        badge.textContent = '\ud83c\udfe0 Pay at the Counter';
+        badge.className = 'chosen-method-badge cmb-counter';
+      } else {
+        badge.textContent = '\ud83d\udcb0 Salary Deduction';
+        badge.className = 'chosen-method-badge cmb-online';
+      }
+    }
+    // Update month display
+    var dueEl = document.getElementById('modal-due-date');
+    var monthNum = window._payMonth === 'next' ? (payData.monthNum || 1) + 1 : (payData.monthNum || 1);
+    if (dueEl) dueEl.textContent = 'Month ' + monthNum;
+    // Update method in summary
+    var csMethod = document.getElementById('cs-method');
+    if (csMethod) csMethod.textContent = type === 'Counter' ? '\ud83c\udfe0 Counter' : '\ud83d\udcb0 Salary Deduction';
+    updatePayConfirm();
+  }
+
+  function backToMethodChoice() {
+    var s1 = document.getElementById('pay-step1');
+    var s2 = document.getElementById('pay-step2');
+    if (s1) s1.style.display = 'block';
+    if (s2) s2.style.display = 'none';
+  }
+
+  /* ── Proof image preview ── */
+  function previewProofImage(input) {
+    if (!input.files || !input.files[0]) return;
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      var img = document.getElementById('proof-preview-img');
+      var preview = document.getElementById('proof-preview');
+      var uploadArea = document.getElementById('proof-upload-area');
+      if (img) img.src = e.target.result;
+      if (preview) preview.style.display = 'block';
+      if (uploadArea) uploadArea.style.display = 'none';
+    };
+    reader.readAsDataURL(input.files[0]);
+  }
+
+  function removeProofImage() {
+    var input = document.getElementById('pay-photo');
+    var preview = document.getElementById('proof-preview');
+    var uploadArea = document.getElementById('proof-upload-area');
+    if (input) input.value = '';
+    if (preview) preview.style.display = 'none';
+    if (uploadArea) uploadArea.style.display = 'block';
+  }
+
+  function updatePayConfirm() {
+    var amtEl = document.getElementById('pay-amount');
+    var a = amtEl ? (parseFloat(amtEl.value) || 0) : 0;
+    var bal = payData.balance - a;
+    if (bal < 0) bal = 0;
+    var csAmt = document.getElementById('cs-amt');
+    var csBal = document.getElementById('cs-bal');
+    var csMo = document.getElementById('cs-month');
+    if (csAmt) csAmt.textContent = '\u20B1' + Math.round(a).toLocaleString();
+    if (csBal) csBal.textContent = '\u20B1' + Math.round(bal).toLocaleString();
+    var baseMonth = window._payMonth === 'next' ? (payData.monthNum || 1) + 1 : (payData.monthNum || 1);
+    if (csMo) {
+      if (payData.totalDue > 0 && a > 0) {
+        var monthsCovered = Math.floor(a / payData.totalDue);
+        if (monthsCovered <= 0) monthsCovered = 1;
+        if (a >= payData.balance) {
+          csMo.innerHTML = '<span style="color:#3B6D11;font-weight:600;">\u2713 Full payoff!</span>';
+        } else if (monthsCovered > 1) {
+          csMo.textContent = monthsCovered + ' months (Month ' + baseMonth + '\u2013' + (baseMonth + monthsCovered - 1) + ')';
+        } else {
+          csMo.textContent = 'Month ' + baseMonth;
+        }
+      } else {
+        csMo.textContent = 'Month ' + baseMonth;
+      }
+    }
+  }
+
+  function setPayMonths(n) {
+    var inp = document.getElementById('pay-num-months');
+    if (inp) {
+      inp.value = n;
+      syncPayMonthsFromInput();
+    }
+    // Highlight active month button
+    document.querySelectorAll('#pay-step2 .qp-btn[id^="pm-"]').forEach(function(b){ b.classList.remove('qp-active'); });
+    var btn = document.getElementById('pm-' + n);
+    if (btn) btn.classList.add('qp-active');
+  }
+
+  function syncPayMonthsFromInput() {
+    var inp = document.getElementById('pay-num-months');
+    var n = inp ? (parseInt(inp.value) || 1) : 1;
+    if (n < 1) { if (inp) inp.value = 1; n = 1; }
+    var amtEl = document.getElementById('pay-amount');
+    if (amtEl) {
+      var maxMonths = Math.floor(payData.balance / payData.totalDue);
+      if (n > maxMonths && payData.totalDue > 0) n = Math.max(1, maxMonths);
+      amtEl.value = Math.min(payData.totalDue * n, payData.balance);
+      if (inp) inp.value = n;
+    }
+    updatePayConfirm();
+  }
+
+  function quickPayAmount(type) {
+    var amtEl = document.getElementById('pay-amount');
+    if (!amtEl) return;
+    if (type === '1mo') {
+      amtEl.value = payData.totalDue;
+      setPayMonths(1);
+    } else if (type === '2mo') {
+      amtEl.value = Math.min(payData.totalDue * 2, payData.balance);
+      setPayMonths(2);
+    } else if (type === 'full') {
+      amtEl.value = payData.balance;
+    }
+    updatePayConfirm();
+    // Highlight active button
+    document.querySelectorAll('.qp-btn').forEach(function(b){ b.classList.remove('qp-active'); });
+    var btn = document.getElementById('qp-' + type);
+    if (btn) btn.classList.add('qp-active');
+  }
+
+  function submitPayment() {
+    var a = parseFloat(document.getElementById('pay-amount').value) || 0;
+    var dt = (document.getElementById('pay-date').value || '').trim();
+    var method = window._payType || 'Counter';
+    var monthNum = window._payMonth === 'next' ? (payData.monthNum || 1) + 1 : (payData.monthNum || 1);
+
+    if (!a) { showToast('Please enter the amount paid.'); return; }
+    if (!dt) { showToast('Please enter the payment date.'); return; }
+
+    var notes = (document.getElementById('pay-notes').value || '').trim();
+    var member = null;
+    try { member = JSON.parse(localStorage.getItem('campuscoop_current_member')); } catch (e) { }
+    if (!member) { showToast('Please log in first.'); return; }
+
+    var numMonths = Math.floor(a / payData.totalDue);
+    if (numMonths < 1) numMonths = 1;
+    if (a >= payData.balance) {
+      numMonths = Math.max(1, Math.ceil(payData.balance / payData.totalDue));
+    }
+
+    var btn = document.querySelector('.pay-bsub');
+    if (btn) { btn.disabled = true; btn.textContent = 'Submitting...'; }
+
+    var monthEnd = monthNum + numMonths - 1;
+    var monthLabel = numMonths > 1 ? 'Months ' + monthNum + '\u2013' + monthEnd : 'Month ' + monthNum;
+
+    google.script.run
+      .withSuccessHandler(function (r) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Submit for Approval'; }
+        if (r && r.success) {
+          var sm = document.getElementById('pay-success-msg');
+          var methodLabel = method === 'Counter' ? 'Pay at the Counter' : 'Salary Deduction';
+          if (sm) sm.textContent =
+            'Your ' + methodLabel + ' payment of \u20B1' + Math.round(a).toLocaleString()
+            + ' for ' + monthLabel
+            + ' has been submitted and is now pending admin approval. '
+            + 'You will be notified by email once confirmed.';
+
+          // Show after-payment projection
+          var projEl = document.getElementById('pay-projection');
+          if (projEl) {
+            var newBalance = Math.max(0, payData.balance - a);
+            var nextDue = payData.totalDue;
+            if (payData.loanType === 'Regular' && payData.principal > 0) {
+              var nextInterest = Math.round(newBalance * 0.01);
+              nextDue = payData.principal + nextInterest;
+            }
+            document.getElementById('proj-amount-paid').textContent = '\u20B1' + Math.round(a).toLocaleString();
+            document.getElementById('proj-remaining-bal').textContent = '\u20B1' + Math.round(newBalance).toLocaleString();
+            document.getElementById('proj-next-due').textContent = '\u20B1' + Math.round(nextDue).toLocaleString();
+
+            var noteEl = document.getElementById('pay-proj-note');
+            if (noteEl) {
+              if (newBalance <= 0) {
+                noteEl.textContent = '\u2705 This payment covers your full balance. No further payments needed for this loan.';
+              } else if (a >= payData.totalDue) {
+                noteEl.textContent = '\u2139\ufe0f After approval, your estimated next payment will be \u20B1' + Math.round(nextDue).toLocaleString() + '. Staying current keeps your account in good standing.';
+              } else {
+                noteEl.textContent = '\u2139\ufe0f Your remaining balance after this payment is estimated at \u20B1' + Math.round(newBalance).toLocaleString() + '. A full monthly due is \u20B1' + Math.round(payData.totalDue).toLocaleString() + '.';
+              }
+            }
+            projEl.style.display = 'block';
+          }
+
+          var s1 = document.getElementById('pay-step1');
+          var s2 = document.getElementById('pay-step2');
+          var su = document.getElementById('pay-success');
+          if (s1) s1.style.display = 'none';
+          if (s2) s2.style.display = 'none';
+          if (su) su.style.display = 'block';
+        } else {
+          showToast('Error: ' + (r && r.message ? r.message : 'Failed'));
+        }
+      })
+      .withFailureHandler(function (e) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Submit for Approval'; }
+        showToast('Error: ' + e.message);
+      })
+      .submitMultiMonthPayment({
+        memberId: member.username || '',
+        memberName: (member.firstName || '') + ' ' + (member.lastName || ''),
+        memberEmail: member.email || '',
+        totalAmount: a,
+        date: dt,
+        method: method,
+        notes: notes + (method === 'Salary Deduction' ? ' [Salary Deduction]' : ' [Counter]'),
+        loanType: payData.loanType,
+        monthStart: monthNum,
+        numMonths: numMonths,
+        monthlyAmount: payData.totalDue,
+        proofBase64: ''
+      });
+  }
+
+  var allMemberPayments = [];
+
+  function loadMemberPayments() {
+    // Empty, absorbed by loadMemberDashboard for speed
+  }
+
+  function renderMemberPayments(loanTypeFilter) {
+    var tb = document.getElementById('pay-table');
+    if (!tb) return;
+
+    var active = (loansData || []).filter(function(l) { return l.status === 'Active'; });
+    if (active.length === 0) {
+      tb.innerHTML = '<tr><td colspan="4"><div class="empty-state"><div class="empty-icon">&#128179;</div><div class="empty-title">No payment records yet</div><div class="empty-sub">All your payments will appear here once your spreadsheet is connected.</div></div></td></tr>';
+      return;
+    }
+
+    // Filter active loans by selected type
+    var filteredLoans = active;
+    if (loanTypeFilter && loanTypeFilter !== 'all') {
+      filteredLoans = active.filter(function(l) { return l.loanType === loanTypeFilter; });
+    }
+    if (filteredLoans.length === 0) {
+      var tLabel = loanTypeFilter === 'all' ? 'payment records' : loanTypeFilter + ' payments';
+      var sLabel = loanTypeFilter === 'all' ? 'payments' : loanTypeFilter + ' payments';
+      tb.innerHTML = '<tr><td colspan="4"><div class="empty-state"><div class="empty-icon">&#128269;</div><div class="empty-title">No ' + tLabel + ' yet</div><div class="empty-sub">All your ' + sLabel + ' will appear here once your spreadsheet is connected.</div></div></td></tr>';
+      return;
+    }
+
+    // Build full schedule from filtered loans
+    var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var payLookup = {};
+    (allMemberPayments || []).forEach(function(p) {
+      var key = p.loanType + '-' + p.monthNum;
+      if (!payLookup[key] || (p.status !== 'Pending' && payLookup[key].status === 'Pending')) {
+        payLookup[key] = p;
+      }
+    });
+
+    // Type accent colors
+    var typeColors = { 'Regular': '#3B6D11', 'Commodity': '#6B3B9A', 'Short Term': '#185FA5' };
+    var typeBg    = { 'Regular': '#EAF3DE', 'Commodity': '#F3EAFB', 'Short Term': '#E6F1FB' };
+
+    var html = '';
+    var now = new Date(); now.setHours(0,0,0,0);
+
+    filteredLoans.forEach(function(loan) {
+      var lt = loan.loanType || 'Short Term';
+      var term = loan.term || 1;
+      var releaseDate = loan.startDate ? new Date(loan.startDate) : null;
+      var monthly = loan.monthly || 0;
+      var origAmt = loan.amount || 0;
+
+      // Loan type group header
+      var tc = typeColors[lt] || '#374151';
+      var bg = typeBg[lt] || '#F3F4F6';
+      html += '<tr style="background:' + bg + ';"><td colspan="4" style="padding:6px 12px;font-size:11px;font-weight:700;color:' + tc + ';text-transform:uppercase;letter-spacing:0.07em;border-bottom:2px solid ' + tc + '22;">\u25CF ' + lt + ' Loan</td></tr>';
+
+      for (var m = 1; m <= term; m++) {
+        var totalDue;
+        if (lt === 'Regular' && term > 0) {
+          var p = Math.round(origAmt / term);
+          var rb = origAmt - (p * (m - 1));
+          if (rb < 0) rb = 0;
+          var i = Math.round(rb * 0.01);
+          totalDue = p + i;
+        } else {
+          totalDue = monthly;
+        }
+
+        var dueDateStr = '\u2014';
+        if (releaseDate && !isNaN(releaseDate.getTime())) {
+          var d = new Date(releaseDate);
+          d.setMonth(d.getMonth() + m);
+          dueDateStr = MONTHS[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+        }
+
+        var payKey = lt + '-' + m;
+        var payRec = payLookup[payKey];
+
+        var status, statusClass, statusLabel;
+        if (payRec && (payRec.status === 'Confirmed' || payRec.status === 'Paid')) {
+          status = 'Paid'; statusClass = 'stat-paid'; statusLabel = 'Confirmed';
+        } else if (payRec && (payRec.status === 'Pending' || payRec.status === 'Under Review')) {
+          status = 'Pending'; statusClass = 'stat-settlement'; statusLabel = payRec.status;
+        } else {
+          if (dueDateStr !== '\u2014') {
+            var dd = new Date(dueDateStr);
+            if (!isNaN(dd.getTime())) {
+              var diff = Math.ceil((dd - now) / (1000*60*60*24));
+              if (diff < 0) { status = 'Due'; statusClass = 'stat-pending'; statusLabel = 'Due'; }
+              else { status = 'Upcoming'; statusClass = 'stat-review'; statusLabel = 'Upcoming'; }
+            } else {
+              status = 'Upcoming'; statusClass = 'stat-review'; statusLabel = 'Upcoming';
+            }
+          } else {
+            status = 'Upcoming'; statusClass = 'stat-review'; statusLabel = 'Upcoming';
+          }
+        }
+
+        // Check if this is the current month
+        var highlight = false;
+        if (dueDateStr !== '\u2014') {
+          var dd2 = new Date(dueDateStr);
+          if (!isNaN(dd2.getTime())) {
+            highlight = dd2.getMonth() === now.getMonth() && dd2.getFullYear() === now.getFullYear();
+          }
+        }
+
+        var rowStyle = highlight ? 'background:#FFFBEA;border-left:3px solid #F59E0B;' : status === 'Paid' ? 'opacity:0.65;' : '';
+
+        html += '<tr style="' + rowStyle + '">';
+        html += '<td style="font-weight:' + (highlight ? '700' : '600') + ';color:' + (highlight ? '#B45309' : 'inherit') + ';">' + dueDateStr + (highlight ? ' <span style="font-size:10px;background:#F59E0B;color:#fff;border-radius:4px;padding:1px 5px;vertical-align:middle;">Now</span>' : '') + '</td>';
+        html += '<td style="font-weight:600;color:' + tc + ';">' + lt + '</td>';
+        html += '<td style="font-weight:600;">\u20B1' + totalDue.toLocaleString() + '</td>';
+        html += '<td><span class="status-badge ' + statusClass + '">' + statusLabel + '</span></td>';
+        html += '</tr>';
+      }
+    });
+
+    tb.innerHTML = html;
+  }
+
+  /* ── Member OR Receipt Modal ── */
+  function showMemberOR(p) {
+    var member = null;
+    try { member = JSON.parse(localStorage.getItem('campuscoop_current_member')); } catch (e) { }
+    document.getElementById('m-or-ref').textContent = p.orNumber || '\u2014';
+    document.getElementById('m-or-name').textContent = p.memberName || (member ? member.firstName + ' ' + member.lastName : '\u2014');
+    document.getElementById('m-or-id').textContent = p.memberId || (member ? member.username : '\u2014');
+    document.getElementById('m-or-loan').textContent = p.loanType || '\u2014';
+    document.getElementById('m-or-month').textContent = 'Month ' + (p.monthNum || '\u2014');
+    document.getElementById('m-or-amount').textContent = '\u20B1' + (p.amount ? Number(p.amount).toLocaleString() : '\u2014');
+    document.getElementById('m-or-method').textContent = p.method || '\u2014';
+    document.getElementById('m-or-datetime').textContent = p.datePaid || p.timestamp || '\u2014';
+    document.getElementById('m-or-status').textContent = 'CONFIRMED';
+    var ov = document.getElementById('m-or-ov');
+    if (ov) ov.classList.add('on');
+  }
+  function closeMemberOR() {
+    var ov = document.getElementById('m-or-ov');
+    if (ov) ov.classList.remove('on');
+  }
+  function downloadMemberOR() {
+    var card = document.getElementById('m-or-card-print');
+    if (!card) return;
+    var printWin = window.open('', '_blank', 'width=600,height=700');
+    printWin.document.write('<!DOCTYPE html><html><head><title>Official Receipt</title>');
+    printWin.document.write('<style>');
+    printWin.document.write("@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');");
+    printWin.document.write('*{box-sizing:border-box;margin:0;padding:0}body{font-family:Montserrat,Arial,sans-serif;background:#fff;padding:32px}');
+    printWin.document.write('.or-card{border:1.5px solid #E0DDD6;border-radius:16px;overflow:hidden;max-width:480px;margin:0 auto}');
+    printWin.document.write('.or-card-header{background:#1C2B3A;padding:24px;text-align:center}');
+    printWin.document.write('.or-org{font-size:18px;font-weight:700;color:#fff;letter-spacing:0.05em}');
+    printWin.document.write('.or-org span{color:#7BBFFF}');
+    printWin.document.write('.or-org-sub{font-size:10px;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:0.08em;margin-top:3px}');
+    printWin.document.write('.or-badge{display:inline-block;background:rgba(255,255,255,0.12);color:#fff;font-size:10px;font-weight:700;letter-spacing:0.12em;padding:5px 14px;border-radius:20px;margin-top:12px;text-transform:uppercase}');
+    printWin.document.write('.or-ref-row{background:#F8F9FA;padding:16px;text-align:center;border-bottom:0.5px solid #E0DDD6}');
+    printWin.document.write('.or-ref-label{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px}');
+    printWin.document.write('.or-ref-val{font-size:16px;font-weight:700;font-family:"DM Mono",monospace;color:#1C2B3A;letter-spacing:0.04em}');
+    printWin.document.write('.or-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;padding:0}');
+    printWin.document.write('.or-detail-item{padding:12px 16px;border-bottom:0.5px solid #F0EDE8}');
+    printWin.document.write('.or-detail-item:nth-child(odd){border-right:0.5px solid #F0EDE8}');
+    printWin.document.write('.or-dl{font-size:10px;color:#aaa;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:3px}');
+    printWin.document.write('.or-dv{font-size:13px;font-weight:500;color:#1a1a1a}');
+    printWin.document.write('.or-amt{font-family:"DM Mono",monospace;font-weight:700;font-size:15px;color:#1B5E20}');
+    printWin.document.write('.or-status-val{color:#3B6D11;font-weight:700}');
+    printWin.document.write('.or-note{padding:14px 16px;font-size:11px;color:#555;text-align:center;background:#FAFAF8;border-top:0.5px solid #E0DDD6;line-height:1.6}');
+    printWin.document.write('.or-actions{display:none}');
+    printWin.document.write('</style></head><body>');
+    printWin.document.write(card.querySelector('.or-card').outerHTML);
+    printWin.document.write('</body></html>');
+    printWin.document.close();
+    setTimeout(function(){ printWin.print(); }, 400);
+  }
+
+  /* ── My Loan Ledger ── */
+  var _mlData = null;       // { loans: [], schedule: [], payments: [] }
+  var _mlFilter = '';
+
+  function renderLedger() {
+    var member = null;
+    try { member = JSON.parse(localStorage.getItem('campuscoop_current_member')); } catch(e) {}
+    if (!member || !member.username) return;
+
+    google.script.run
+      .withSuccessHandler(function(r) {
+        if (!r || !r.success || !r.loans || r.loans.length === 0) {
+          _mlData = null;
+          mlShowEmpty();
+          return;
+        }
+    _mlData = {
+      loans: r.loans,
+      payments: r.payments || []
+    };
+    _mlData.schedule = mlBuildFullSchedule(_mlData.loans, _mlData.payments);
+    mlRender();
+      })
+      .withFailureHandler(function() {
+        mlShowEmpty();
+      })
+      .getMemberLedgerData(member.username);
+  }
+
+  function mlNormType(lt) {
+    var s = String(lt || '').toUpperCase();
+    if (s.indexOf('REG') === 0) return 'Regular';
+    if (s.indexOf('COM') === 0) return 'Commodity';
+    if (s.indexOf('STL') === 0 || s.indexOf('SHORT') === 0 || s.indexOf('ST ') === 0 || s === 'ST') return 'Short Term';
+    return String(lt || '');
+  }
+
+  function mlPayKey(p) {
+    var mn = parseInt(String(p.monthNum || '').replace(/\D/g, ''), 10);
+    if (!mn) mn = 1;
+    return mlNormType(p.loanType) + '-' + mn;
+  }
+
+  function mlBuildFullSchedule(loans, payments) {
+    var schedule = [];
+    var monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var payLookup = {};
+
+    payments.forEach(function(p) {
+      var key = mlPayKey(p);
+      if (!payLookup[key] || (p.status !== 'Pending' && payLookup[key].status === 'Pending')) {
+        payLookup[key] = p;
+      }
+    });
+
+    loans.forEach(function(loan) {
+      var lt = loan.loanType || 'Short Term';
+      var term = loan.term || 1;
+      var origAmt = loan.amount || 0;
+      var monthly = loan.monthly || 0;
+      var releaseDate = loan.startDate ? new Date(loan.startDate) : null;
+
+      var runBal = origAmt;
+
+      for (var m = 1; m <= term; m++) {
+        var principal, interest, totalDue;
+
+        if (lt === 'Regular') {
+          principal = Math.round(origAmt / term);
+          interest  = Math.round(runBal * 0.01);
+          totalDue  = principal + interest;
+          runBal    = Math.max(0, runBal - principal);
+        } else {
+          var totalInt = Math.round((loan.totalToPay || 0) - origAmt);
+          interest  = term > 0 ? Math.round(totalInt / term) : 0;
+          principal = Math.round(origAmt / term);
+          totalDue  = monthly;
+          runBal    = Math.max(0, runBal - principal);
+        }
+
+        var dueDateStr = '\u2014';
+        if (releaseDate && !isNaN(releaseDate.getTime())) {
+          var d = new Date(releaseDate);
+          d.setMonth(d.getMonth() + m);
+          dueDateStr = monthNames[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+        }
+
+        var payKey   = lt + '-' + m;
+        var payRec   = payLookup[payKey];
+        var isPaid   = payRec && (payRec.status === 'Confirmed' || payRec.status === 'Paid');
+        var isPending = payRec && (payRec.status === 'Pending' || payRec.status === 'Under Review');
+
+        var status;
+        if (isPaid)                   status = 'Paid';
+        else if (isPending)           status = 'Pending';
+        else {
+          var now = new Date();
+          now.setHours(0,0,0,0);
+          if (dueDateStr !== '\u2014') {
+            var dueDate = new Date(dueDateStr);
+            if (!isNaN(dueDate.getTime())) {
+              var diffDays = Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24));
+              if (diffDays < -30)       status = 'Overdue';
+              else if (diffDays < 0)    status = 'Due';
+              else if (diffDays <= 30)  status = 'Upcoming';
+              else                      status = 'Future';
+            } else {
+              status = 'Future';
+            }
+          } else {
+            status = 'Future';
+          }
+        }
+
+        schedule.push({
+          loanType: lt,
+          month: m,
+          dueDate: dueDateStr,
+          principal: principal,
+          interest: interest,
+          totalDue: totalDue,
+          balanceAfter: Math.max(0, runBal),
+          status: status,
+          payRec: payRec || null
+        });
+      }
+    });
+
+    return schedule;
+  }
+
+  function mlRender() {
+    if (!_mlData || !_mlData.schedule || _mlData.schedule.length === 0) {
+      mlShowEmpty();
+      return;
+    }
+
+    var sched = _mlData.schedule;
+
+    // --- Schedule table ---
+    _mlFilter = 'all';
+    document.querySelectorAll('.ml-filter-btn').forEach(function(b) {
+      b.classList.toggle('ml-on', b.textContent.trim().toLowerCase() === 'all');
+    });
+    mlRenderTable('all');
+  }
+
+  function mlRenderTable(filter) {
+    var tbody = document.getElementById('ml-table-body');
+    if (!tbody) return;
+
+    if (!_mlData || !_mlData.schedule || _mlData.schedule.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4"><div class="ml-empty"><div class="ml-empty-icon">&#128179;</div><div class="ml-empty-title">My Loan Ledger</div><div class="ml-empty-sub">Your payment history will appear here.</div></div></td></tr>';
+      return;
+    }
+
+    var sched = _mlData.schedule;
+    var filtered = sched;
+    if (filter === 'Paid')       filtered = sched.filter(function(s){ return s.status === 'Paid' || s.status === 'Pending'; });
+    else if (filter === 'Due')   filtered = sched.filter(function(s){ return s.status === 'Due' || s.status === 'Overdue'; });
+    else if (filter === 'Upcoming') filtered = sched.filter(function(s){ return s.status === 'Upcoming' || s.status === 'Future'; });
+
+    if (filtered.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4"><div class="ml-empty"><div class="ml-empty-icon">&#128269;</div><div class="ml-empty-title">' + (filter ? 'No ' + filter + ' entries' : 'No entries') + '</div><div class="ml-empty-sub">' + (filter ? 'No payments match this filter.' : 'No payment entries found.') + '</div></div></td></tr>';
+      return;
+    }
+
+    var lastType = '';
+    var html = '';
+
+    filtered.forEach(function(s) {
+      var lt = s.loanType;
+
+      // Group header when loan type changes
+      if (lt !== lastType) {
+        html += '<tr style="background:#F9FAFB;"><td colspan="4" style="padding:7px 12px;font-size:10px;font-weight:700;color:#000;text-transform:uppercase;letter-spacing:0.07em;border-bottom:1px solid #E5E7EB;">\u25CF ' + lt + ' Loan</td></tr>';
+        lastType = lt;
+      }
+
+      html += '<tr>';
+      html += '<td>' + s.dueDate + '</td>';
+      html += '<td class="ml-mono">' + fmt(s.principal) + '</td>';
+      html += '<td class="ml-mono" style="font-weight:700;">' + fmt(s.totalDue) + '</td>';
+      html += '<td class="ml-mono">' + fmt(s.balanceAfter) + '</td>';
+      html += '</tr>';
+    });
+
+    tbody.innerHTML = html;
+  }
+
+  function mlFilterSchedule(el, filter) {
+    document.querySelectorAll('.ml-filter-btn').forEach(function(b) { b.classList.remove('ml-on'); });
+    el.classList.add('ml-on');
+    _mlFilter = filter;
+    mlRenderTable(filter);
+  }
+
+  function mlShowEmpty() {
+    var tbody = document.getElementById('ml-table-body');
+    if (tbody) {
+      tbody.innerHTML = '<tr><td colspan="4"><div class="ml-empty"><div class="ml-empty-icon">&#128179;</div><div class="ml-empty-title">My Loan Ledger</div><div class="ml-empty-sub">Your payment history will appear here.</div></div></td></tr>';
+    }
+  }
+
+  function mlEl(id) { return document.getElementById(id); }
+
+  function filterPay(el, filter) {
+    document.querySelectorAll('.pf-btn').forEach(function (b) {
+      b.classList.remove('on');
+    });
+    el.classList.add('on');
+    renderMemberPayments(filter);
+  }
+  var loansData = [];
+
+  /* ─────────────────────────────────────────────
+     HOME: Render active loan cards with actions
+  ───────────────────────────────────────────── */
+  function renderHomeActiveLoans(loans, capital) {
+    var container = document.getElementById('home-active-loans');
+    if (!container) return;
+
+    var active = (loans || []).filter(function(l){ return l.status === 'Active' || l.status === 'Overdue'; });
+
+    // Update header CBU display
+    var cbuDisp = document.getElementById('m-cbu-display');
+    if (cbuDisp) cbuDisp.textContent = fmt(capital || 0);
+
+    if (active.length === 0) {
+      container.innerHTML =
+        '<div style="background:#FAFBFD;border:1.5px dashed #D1D5DB;border-radius:16px;padding:40px 20px;text-align:center;margin-bottom:16px;">'
+        + '  <div style="font-size:36px;margin-bottom:12px;">🎉</div>'
+        + '  <div style="font-size:15px;font-weight:700;color:#111827;margin-bottom:6px;">No Active Loans</div>'
+        + '  <div style="font-size:12px;color:#6B7280;line-height:1.5;max-width:260px;margin:0 auto 18px;">You have paid off all your loans or have not applied for one yet.</div>'
+        + '  <button onclick="switchPage(\'loans\',null)" style="padding:10px 24px;background:#0A66C2;color:#ffffff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;transition:all 0.15s;">+ Apply for a Loan</button>'
+        + '</div>';
+      return;
+    }
+
+    var html = '';
+    active.forEach(function(l) {
+      var f = fmt;
+      var lt = l.loanType || 'Short Term';
+      
+      // Calculate months paid & paid percentage
+      var principalDiv = (lt === 'Regular' && l.term > 0) ? Math.round(l.amount / l.term) : (l.monthly || 1);
+      var paidMonths = Math.min(l.term, Math.max(0, Math.round(((l.totalToPay || 0) - (l.balance || 0)) / principalDiv)));
+      var pct = l.totalToPay > 0 ? Math.round((1 - (l.balance / l.totalToPay)) * 100) : 0;
+      if (pct < 0) pct = 0; if (pct > 100) pct = 100;
+
+      // Status label and colors
+      var isOverdue = (l.status === 'Overdue');
+      var statusText = isOverdue ? 'Overdue' : 'Active';
+      var statusColor = isOverdue ? '#EF4444' : '#10B981';
+      var statusBg = isOverdue ? '#FEE2E2' : '#D1FAE5';
+
+      var color = lt === 'Regular' ? '#3B6D11' : lt === 'Commodity' ? '#6B3B9A' : '#185FA5';
+      var label = lt === 'Regular' ? 'RL Loan' : lt === 'Short Term' ? 'STL Loan' : 'Commodity Loan';
+
+      html += '<div class="home-loan-card" style="border-top: 4px solid ' + color + '; padding: 20px; background: #fff; border-radius: 16px; border: 1px solid #E5E7EB; border-top-color: ' + color + '; margin-bottom: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02);">';
+      
+      // Card Header: Type Label and Status Pill
+      html += '  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">';
+      html += '    <span style="font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.04em;">' + label + '</span>';
+      html += '    <span style="font-size:10px;font-weight:700;color:' + statusColor + ';background:' + statusBg + ';padding:2px 8px;border-radius:12px;text-transform:uppercase;letter-spacing:0.02em;">' + statusText + '</span>';
+      html += '  </div>';
+      
+      // Main Balance Area
+      html += '  <div style="margin-bottom:14px;">';
+      html += '    <div style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px;">Outstanding Balance</div>';
+      html += '    <div style="font-size:24px;font-weight:800;color:#111827;letter-spacing:-0.5px;">' + f(l.balance) + '</div>';
+      html += '  </div>';
+
+      // Loan Attributes (Amortization & Term)
+      html += '  <div style="display:flex;justify-content:space-between;align-items:center;background:#F9FAFB;border-radius:12px;padding:10px 14px;margin-bottom:14px;border:1px solid #F3F4F6;">';
+      html += '    <div>';
+      html += '      <div style="font-size:10px;color:#9CA3AF;text-transform:uppercase;letter-spacing:0.04em;">Monthly Amortization</div>';
+      html += '      <div style="font-size:14px;font-weight:700;color:#374151;margin-top:2px;">' + f(l.monthly) + '/mo</div>';
+      html += '    </div>';
+      html += '    <div style="text-align:right;">';
+      html += '      <div style="font-size:10px;color:#9CA3AF;text-transform:uppercase;letter-spacing:0.04em;">Term Progress</div>';
+      html += '      <div style="font-size:13px;font-weight:600;color:#374151;margin-top:2px;">' + paidMonths + ' of ' + l.term + ' months</div>';
+      html += '    </div>';
+      html += '  </div>';
+
+      // Visual Progress Bar
+      html += '  <div style="margin-bottom:0px;">';
+      html += '    <div style="display:flex;justify-content:space-between;font-size:11px;color:#6B7280;margin-bottom:6px;font-weight:500;">';
+      html += '      <span>Progress</span><span>' + pct + '% paid</span>';
+      html += '    </div>';
+      html += '    <div style="background:#E5E7EB;border-radius:8px;height:6px;overflow:hidden;width:100%;">';
+      html += '      <div style="background:#10B981;height:100%;border-radius:8px;width:' + pct + '%;transition:width 0.4s;"></div>';
+      html += '    </div>';
+      html += '  </div>';
+      
+      html += '</div>';
+    });
+    container.innerHTML = html;
+  }
+
+  /* ─────────────────────────────────────────────
+     Prepare Payment modal for a specific loan
+  ───────────────────────────────────────────── */
+  function prepPayForLoan(l) {
+    var principal, interest, totalDue;
+    if (l.loanType === 'Regular' && l.term > 0) {
+      principal = Math.round(l.amount / l.term);
+      interest  = Math.round(l.balance * 0.01);
+      totalDue  = principal + interest;
+    } else {
+      var totalInt = Math.round((l.totalToPay || 0) - (l.amount || 0));
+      interest  = l.term > 0 ? Math.round(totalInt / l.term) : 0;
+      principal = (l.monthly || 0) - interest;
+      totalDue  = l.monthly || 0;
+    }
+    payData.loanType  = l.loanType;
+    payData.principal = principal;
+    payData.interest  = interest;
+    payData.totalDue  = totalDue;
+    payData.balance   = l.balance;
+    var monthsPaid = l.amount && l.monthly ? Math.round((l.totalToPay - l.balance) / l.monthly) : 0;
+    if (monthsPaid < 0) monthsPaid = 0;
+    payData.monthNum = monthsPaid + 1;
+    openPayModal();
+  }
+
+  /* ─────────────────────────────────────────────
+     LOAN TAB: Swipeable Application Carousel
+  ───────────────────────────────────────────── */
+  var _carouselIdx = 0;
+  var _carouselItems = [];
+
+  function evaluateLoanEligibility(loans, capital, memberType) {
+    var activeByType = {};
+    (loans || []).forEach(function(l) {
+      if (l.status === 'Active') activeByType[l.loanType] = true;
+    });
+    var activeCount = Object.keys(activeByType).length;
+    var isJobOrder = (memberType || '').toLowerCase().indexOf('job') !== -1;
+    var isFaculty = (memberType || '').toLowerCase().indexOf('faculty') !== -1
+      || (memberType || '').toLowerCase().indexOf('teacher') !== -1;
+
+    // CBU-based max loanable (matches existing logic: 80% of capital for STL/COM, 300% for REG)
+    var maxSTL = Math.min(15000, Math.round(capital * 0.80));
+    var maxREG = Math.min(200000, Math.round(capital * 3));
+    var maxCOM = Math.min(5000, Math.round(capital * 0.80));
+
+    return {
+      stl: {
+        available: !activeByType['Short Term'] && maxSTL >= 1000,
+        reason: activeByType['Short Term'] ? 'You have an active STL loan' : maxSTL < 1000 ? 'Insufficient CBU' : '',
+        maxLoanable: maxSTL
+      },
+      reg: {
+        available: !activeByType['Regular'] && maxREG >= 5000 && isFaculty,
+        reason: !isFaculty ? 'Faculty only' : activeByType['Regular'] ? 'You have an active Regular loan' : maxREG < 5000 ? 'Insufficient CBU' : '',
+        maxLoanable: maxREG
+      },
+      com: {
+        available: !activeByType['Commodity'] && maxCOM >= 500,
+        reason: activeByType['Commodity'] ? 'You have an active Commodity loan' : maxCOM < 500 ? 'Insufficient CBU' : '',
+        maxLoanable: maxCOM
+      }
+    };
+  }
+
+  function renderLoanCarousel(loans, capital, memberType) {
+    var carousel = document.getElementById('loan-carousel');
+    var dotsEl   = document.getElementById('carousel-dots');
+    if (!carousel) {
+      console.log('Carousel element not found');
+      return;
+    }
+    console.log('Rendering carousel with capital:', capital, 'memberType:', memberType, 'loans:', loans);
+
+    // Use default values if loans is null/undefined
+    if (!loans) loans = [];
+    if (!capital) capital = 0;
+    if (!memberType) memberType = 'Member';
+
+    var elig = evaluateLoanEligibility(loans, capital, memberType);
+
+    var types = [
+      {
+        key: 'stl', label: 'Short Term Loan', icon: '⚡', color: '#185FA5', bg: '#E6F1FB',
+        modalKey: 'stl', rate: '6% flat interest', term: '1–6 months', minAmt: 1000,
+        elig: elig.stl,
+        calcFn: function(a, m) {
+          return { monthly: fmt(a * 1.06 / m), totalInt: fmt(a * 0.06), total: fmt(a * 1.06) };
+        }
+      },
+      {
+        key: 'reg', label: 'Regular Loan', icon: '🏠', color: '#3B6D11', bg: '#EAF3DE',
+        modalKey: 'reg', rate: '1% diminishing/mo', term: '12–60 months', minAmt: 5000,
+        elig: elig.reg,
+        calcFn: function(a, m) {
+          var p = Math.round(a / m); var int = Math.round(a * 0.01);
+          return { monthly: fmt(p + int) + ' (1st mo)', totalInt: fmt(a * 0.01 * m), total: fmt(a + a * 0.01 * m) };
+        }
+      },
+      {
+        key: 'com', label: 'Commodity Loan', icon: '🛒', color: '#6B3B9A', bg: '#F3EBF9',
+        modalKey: 'com', rate: '1% interest/month', term: '1–2 months', minAmt: 500,
+        elig: elig.com,
+        calcFn: function(a, m) {
+          var tot = a + Math.round(a * 0.01 * m);
+          return { monthly: fmt(Math.round(tot / m)), totalInt: fmt(Math.round(a * 0.01 * m)), total: fmt(tot) };
+        }
+      }
+    ];
+    _carouselItems = types;
+
+    var html = '';
+    types.forEach(function(t, i) {
+      var avail = t.elig.available;
+      var max = t.elig.maxLoanable;
+      var overlayHtml = '';
+      if (!avail) {
+        overlayHtml = '<div class="lc-overlay"><div class="lc-overlay-icon">' + (t.elig.reason === 'Faculty only' ? '🔒' : t.elig.reason.indexOf('active') > -1 ? '✅' : '⚠️') + '</div>'
+          + '<div class="lc-overlay-text">' + t.elig.reason + '</div></div>';
+      }
+
+      // Quick estimate defaults
+      var defaultAmt = Math.min(max || 0, t.key === 'stl' ? 5000 : t.key === 'reg' ? 50000 : 2000);
+      if (defaultAmt < t.minAmt) defaultAmt = 0;
+      var defaultMo = t.key === 'stl' ? 3 : t.key === 'reg' ? 36 : 2;
+      var est = avail && defaultAmt > 0 ? t.calcFn(defaultAmt, defaultMo) : null;
+
+      html += '<div class="lc-card" id="lc-card-' + i + '" style="border-top:4px solid ' + t.color + ';">';
+      html += overlayHtml;
+      html += '  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">';
+      html += '    <div style="font-size:28px;">' + t.icon + '</div>';
+      html += '    <div>';
+      html += '      <div style="font-size:16px;font-weight:800;color:#1a1a2e;">' + t.label + '</div>';
+      html += '      <div style="font-size:11px;color:#888;">' + t.rate + ' &middot; ' + t.term + '</div>';
+      html += '    </div>';
+      html += '  </div>';
+      // Max loanable
+      html += '  <div style="background:' + t.bg + ';border-radius:10px;padding:12px 16px;margin-bottom:12px;">';
+      html += '    <div style="font-size:11px;font-weight:600;color:' + t.color + ';text-transform:uppercase;letter-spacing:0.05em;">Max Loanable</div>';
+      html += '    <div style="font-size:22px;font-weight:800;color:' + t.color + ';font-family:\'DM Mono\',monospace;">' + (avail && max > 0 ? fmt(max) : '₱—') + '</div>';
+      html += '    <div style="font-size:11px;color:' + t.color + ';opacity:0.7;">Based on your CBU of ' + fmt(capital || 0) + '</div>';
+      html += '  </div>';
+      // Quick estimate
+      if (est) {
+        html += '  <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#aaa;letter-spacing:0.06em;margin-bottom:8px;">Est. for ' + fmt(defaultAmt) + ' / ' + defaultMo + ' mos</div>';
+        html += '  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px;">';
+        html += '    <div style="background:#F8F7F5;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:10px;color:#aaa;margin-bottom:3px;">Monthly</div><div style="font-size:12px;font-weight:700;color:#1a1a2e;">' + est.monthly + '</div></div>';
+        html += '    <div style="background:#F8F7F5;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:10px;color:#aaa;margin-bottom:3px;">Interest</div><div style="font-size:12px;font-weight:700;color:' + t.color + ';">' + est.totalInt + '</div></div>';
+        html += '    <div style="background:#F8F7F5;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:10px;color:#aaa;margin-bottom:3px;">Total Pay</div><div style="font-size:12px;font-weight:700;color:#1a1a2e;">' + est.total + '</div></div>';
+        html += '  </div>';
+      } else {
+        html += '  <div style="height:64px;"></div>';
+      }
+      // Apply button
+      if (avail) {
+        html += '  <button onclick="openM(\'' + t.modalKey + '\')" style="width:100%;padding:14px;background:' + t.color + ';color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:\'Montserrat\',sans-serif;letter-spacing:0.02em;">Apply for ' + t.label + '</button>';
+      } else {
+        html += '  <button disabled style="width:100%;padding:14px;background:#E8E5DF;color:#bbb;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:not-allowed;font-family:\'Montserrat\',sans-serif;">' + (t.elig.reason || 'Unavailable') + '</button>';
+      }
+      html += '</div>';
+    });
+    carousel.innerHTML = html;
+
+    // Dots
+    var dotsHtml = '';
+    types.forEach(function(_, i) { dotsHtml += '<span class="cdot' + (i === 0 ? ' active' : '') + '" onclick="goToSlide(' + i + ')"></span>'; });
+    if (dotsEl) dotsEl.innerHTML = dotsHtml;
+
+    _carouselIdx = 0;
+    updateCarouselPos();
+    initCarouselSwipe();
+    
+    console.log('Carousel rendered successfully');
+  }
+
+  function updateCarouselPos() {
+    var carousel = document.getElementById('loan-carousel');
+    if (!carousel) return;
+    carousel.style.transform = 'translateX(-' + (_carouselIdx * 100) + '%)';
+    // Update dots
+    document.querySelectorAll('.cdot').forEach(function(d, i) {
+      d.classList.toggle('active', i === _carouselIdx);
+    });
+    // Update arrows
+    var prev = document.getElementById('carousel-prev');
+    var next = document.getElementById('carousel-next');
+    if (prev) prev.style.opacity = _carouselIdx === 0 ? '0.3' : '1';
+    if (next) next.style.opacity = _carouselIdx >= (_carouselItems.length - 1) ? '0.3' : '1';
+  }
+
+  function carouselNav(dir) {
+    var max = _carouselItems.length - 1;
+    _carouselIdx = Math.max(0, Math.min(max, _carouselIdx + dir));
+    updateCarouselPos();
+  }
+
+  function goToSlide(idx) {
+    _carouselIdx = idx;
+    updateCarouselPos();
+  }
+
+  function initCarouselSwipe() {
+    var wrap = document.getElementById('loan-carousel-wrap');
+    if (!wrap || wrap._swipeInit) return;
+    wrap._swipeInit = true;
+    var startX = 0;
+    wrap.addEventListener('touchstart', function(e) { startX = e.touches[0].clientX; }, { passive: true });
+    wrap.addEventListener('touchend', function(e) {
+      var diff = startX - e.changedTouches[0].clientX;
+      if (Math.abs(diff) > 40) carouselNav(diff > 0 ? 1 : -1);
+    }, { passive: true });
+  }
+
+  function filterLoans(el, filter) {
+    document.querySelectorAll('.lf-btn').forEach(function(b){ b.classList.remove('on'); });
+    el.classList.add('on');
+    renderLoans(filter);
+  }
+
+  function renderLoans(filter) {
+    var list = document.getElementById('loans-list');
+    if (!list) return;
+    var filtered = filter === 'all' ? loansData
+      : loansData.filter(function(l){
+          return filter === 'active' ? l.status === 'Active' : l.status === 'Paid';
+        });
+    if (!filtered || !filtered.length) {
+      list.innerHTML = '<div style="background:#fff;border:0.5px solid #E0DDD6;border-radius:12px;padding:40px;text-align:center;"><div style="font-size:32px;margin-bottom:10px;">🔍</div><div style="font-size:13px;font-weight:600;color:#555;margin-bottom:5px;">No loans found.</div></div>';
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < filtered.length; i++) { html += buildLoanCard(filtered[i]); }
+    list.innerHTML = html;
+  }
+
+  function buildLoanCard(loan) {
+    var f = fmt;
+    var originalAmt = loan.amount || 0;
+    var outstandingBal = loan.balance || 0;
+    var pct = originalAmt > 0 ? Math.round((originalAmt - outstandingBal) / originalAmt * 100) : 0;
+    if (pct < 0) pct = 0;
+    if (pct > 100) pct = 100;
+    var isPaid = loan.status === 'Paid';
+
+    var lt = loan.loanType || 'Short Term';
+    var displayType = lt === 'Regular' ? 'RL' : lt === 'Short Term' ? 'STL' : lt;
+    
+    var badgeClass = lt === 'Regular' ? 'badge-rl' : lt === 'Commodity' ? 'badge-com' : 'badge-stl';
+    var fillClass = lt === 'Regular' ? 'fill-rl' : lt === 'Commodity' ? 'fill-com' : 'fill-stl';
+    var statusClass = isPaid ? 'status-paid' : 'status-active';
+    var statusText = isPaid ? 'Paid' : 'Active';
+
+    var termEndDate = loan.maturityDate || '—';
+    var dateGranted = loan.startDate || '—';
+
+    var html = '<div class="loan-card" style="' + (isPaid ? 'opacity: 0.85;' : '') + '">';
+    
+    // Top Row: Badge & Status
+    html += '  <div class="loan-card-top">';
+    html += '    <span class="loan-badge ' + badgeClass + '">' + displayType + ' Loan</span>';
+    html += '    <span class="status-indicator ' + statusClass + '">' + statusText + '</span>';
+    html += '  </div>';
+
+    // Amount row
+    html += '  <div class="loan-amounts-row">';
+    html += '    <div class="loan-amount-granted">' + f(originalAmt) + '</div>';
+    html += '    <div class="loan-amount-outstanding">Outstanding: <strong>' + f(outstandingBal) + '</strong></div>';
+    html += '  </div>';
+
+    // Progress Bar
+    html += '  <div class="loan-progress-container">';
+    html += '    <div class="loan-progress-bg">';
+    html += '      <div class="loan-progress-fill ' + fillClass + '" style="width: ' + pct + '%;"></div>';
+    html += '    </div>';
+    html += '    <div class="loan-progress-text">';
+    html += '      <span>' + pct + '% Paid</span>';
+    html += '      <span>' + (isPaid ? 'Fully Paid' : 'Remaining: ' + f(outstandingBal)) + '</span>';
+    html += '    </div>';
+    html += '  </div>';
+
+    // Information Grid
+    html += '  <div class="loan-info-grid">';
+    html += '    <div class="loan-info-item"><div class="loan-info-label">Date Granted</div><div class="loan-info-value">' + dateGranted + '</div></div>';
+    html += '    <div class="loan-info-item"><div class="loan-info-label">Term End Date</div><div class="loan-info-value">' + termEndDate + '</div></div>';
+    html += '    <div class="loan-info-item"><div class="loan-info-label">Original Amt</div><div class="loan-info-value">' + f(originalAmt) + '</div></div>';
+    html += '    <div class="loan-info-item"><div class="loan-info-label">Monthly Due</div><div class="loan-info-value">' + (isPaid ? '—' : f(loan.monthly)) + '</div></div>';
+    html += '  </div>';
+
+    // Actions if running/active
+    if (!isPaid) {
+      html += '  <div class="loan-actions-area">';
+      html += '    <button class="btn-view-sched-new" onclick="openSchedModal(\'' + (loan.loanId || '') + '\')">View Schedule</button>';
+      html += '    <button class="btn-pay-loan-new" onclick="switchPage(\'payments\',null);setTimeout(openPayModal,100);">Record Payment</button>';
+      html += '  </div>';
+    }
+    
+    html += '</div>';
+    return html;
+  }
+
+  function openSchedModal(loanId) {
+    var loan = null;
+    for (var i = 0; i < loansData.length; i++) {
+      if (loansData[i].loanId === loanId) { loan = loansData[i]; break; }
+    }
+    if (!loan) return;
+    var f = fmt;
+    var lt = loan.loanType || 'Short Term';
+    var term = loan.term || 1;
+    var monthly = loan.monthly || 0;
+    var bal = loan.balance || 0;
+    var totalAmt = loan.totalToPay || loan.amount || 0;
+    
+    var divMonth = lt === 'Regular' ? Math.round(loan.amount / term) : (monthly || 1);
+    var monthsPaid = Math.max(0, Math.round((totalAmt - bal) / divMonth));
+    var releaseDate = new Date(loan.startDate);
+    var monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+    var titleEl = document.getElementById('sched-modal-title');
+    var summaryEl = document.getElementById('sched-modal-summary');
+    var bodyEl = document.getElementById('sched-modal-body');
+    var noteEl = document.getElementById('sched-modal-note');
+
+    if (titleEl) titleEl.textContent = '\uD83D\uDCCB ' + lt + ' Loan \u2014 Payment Schedule';
+    if (summaryEl) summaryEl.innerHTML =
+      '<div class="ss-item"><div class="ss-label">Loan amount</div><div class="ss-val">' + f(loan.amount) + '</div></div>'
+      + '<div class="ss-item"><div class="ss-label">Monthly payment</div><div class="ss-val">' + f(monthly) + '</div></div>'
+      + '<div class="ss-item"><div class="ss-label">Months remaining</div><div class="ss-val">' + (term - monthsPaid) + ' of ' + term + '</div></div>';
+
+    var rows = '';
+    var stLabel = function(m) {
+      if (m <= monthsPaid) return '<span style="font-family:sans-serif;font-size:10px;background:#EAF3DE;color:#3B6D11;padding:2px 7px;border-radius:10px;font-weight:600;">Paid</span>';
+      if (m === monthsPaid + 1) return '<span style="font-family:sans-serif;font-size:10px;background:#FAEEDA;color:#854F0B;padding:2px 7px;border-radius:10px;font-weight:600;">Due</span>';
+      return '<span style="font-family:sans-serif;font-size:11px;color:#ccc;">Upcoming</span>';
+    };
+
+    if (lt === 'Regular') {
+      var runBal = loan.amount;
+      var p = Math.round(loan.amount / term);
+      for (var m = 1; m <= term; m++) {
+        var int = Math.round(runBal * 0.01);
+        var tot = p + int;
+        runBal = Math.max(0, runBal - p);
+        var cls = m <= monthsPaid ? 'st-row-paid' : m === monthsPaid + 1 ? 'st-row-due' : 'st-row-up';
+        
+        var d = new Date(releaseDate);
+        d.setMonth(d.getMonth() + m);
+        var ds = monthNames[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+
+        rows += '<tr class="' + cls + '"><td>' + ds + '</td><td>' + f(p) + '</td><td style="color:#3B6D11;">' + f(int) + '</td><td>' + f(tot) + '</td><td>' + f(runBal) + '</td><td>' + stLabel(m) + '</td></tr>';
+        
+        if (m === monthsPaid + 4 && m < term - 1) {
+          rows += '<tr><td colspan="6" style="text-align:center;color:#aaa;padding:10px;font-family:sans-serif;font-size:11px;">... ' + (term - monthsPaid - 4) + ' more months ...</td></tr>';
+        } else if (m > monthsPaid + 4 && m < term - 1) { continue; }
+      }
+      if (noteEl) noteEl.innerHTML = '\u2B07 <strong>Diminishing interest:</strong> Monthly principal (' + f(p) + ') stays fixed; interest decreases as your balance goes down.';
+    } else {
+      var totalInt2 = Math.round((loan.totalToPay || 0) - (loan.amount || 0));
+      var intAmt = term > 0 ? Math.round(totalInt2 / term) : 0;
+      var prin2 = Math.round((loan.amount || 0) / term);
+      var rb2 = loan.amount;
+      for (var s = 1; s <= term; s++) {
+        rb2 = Math.max(0, rb2 - prin2);
+        var cls2 = s <= monthsPaid ? 'st-row-paid' : s === monthsPaid + 1 ? 'st-row-due' : 'st-row-up';
+        
+        var d2 = new Date(releaseDate);
+        d2.setMonth(d2.getMonth() + s);
+        var ds2 = monthNames[d2.getMonth()] + ' ' + d2.getDate() + ', ' + d2.getFullYear();
+
+        rows += '<tr class="' + cls2 + '"><td>' + ds2 + '</td><td>' + f(prin2) + '</td><td>' + f(intAmt) + '</td><td>' + f(monthly) + '</td><td>' + f(rb2) + '</td><td>' + stLabel(s) + '</td></tr>';
+      }
+      if (noteEl) noteEl.innerHTML = '\u26A1 <strong>Flat interest:</strong> Every month you pay exactly ' + f(monthly) + '. The interest is split equally across all months.';
+    }
+
+    if (bodyEl) bodyEl.innerHTML = rows;
+    document.getElementById('sched-overlay').classList.add('on');
+  }
+
+  function closeSchedModal() {
+    document.getElementById('sched-overlay').classList.remove('on');
+  }
+
+  /* ── Save profile contact info (email + phone + department) ── */
+  function saveProfileContact() {
+    var member = null;
+    try { member = JSON.parse(localStorage.getItem('campuscoop_current_member')); } catch(e) {}
+    if (!member || !member.username) { showToast('Not logged in.'); return; }
+
+    var newEmail = (document.getElementById('prof-email-input').value || '').trim();
+    var newPhone = (document.getElementById('prof-phone-input').value || '').trim();
+    var newDept = (document.getElementById('prof-dept-input').value || '').trim();
+
+    if (!newEmail && !newPhone && !newDept) { showToast('Enter at least one field to update.'); return; }
+
+    var btn = document.getElementById('prof-save-btn');
+    var msg = document.getElementById('prof-save-msg');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+    if (msg) msg.style.display = 'none';
+
+    google.script.run
+      .withSuccessHandler(function(r) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Save Changes'; }
+        if (r && r.success) {
+          // Update localStorage so the profile reflects immediately
+          member.email = newEmail || member.email;
+          member.phone = newPhone || member.phone;
+          member.department = newDept || member.department;
+          try { localStorage.setItem('campuscoop_current_member', JSON.stringify(member)); } catch(e) {}
+          // Update display
+          var disp = document.getElementById('prof-email-display');
+          if (disp) disp.textContent = newEmail || member.email || '\u2014';
+          var deptDisp = document.getElementById('prof-dept');
+          if (deptDisp) deptDisp.textContent = newDept || member.department || '\u2014';
+          if (msg) { msg.style.display = 'inline'; setTimeout(function(){ msg.style.display = 'none'; }, 3000); }
+          showToast('Profile info saved!');
+        } else {
+          showToast('Error: ' + (r && r.message || 'Failed to save.'));
+        }
+      })
+      .withFailureHandler(function(e) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Save Changes'; }
+        showToast('Error: ' + e.message);
+      })
+      .updateMemberProfile(member.username, newEmail, newPhone, newDept);
+  }
+
+  /* ── Analytics rendering ── */
+  function renderAnalytics(loans, payments) {
+    var active = loans.filter(function(l){ return l.status === 'Active'; });
+    var confirmed = (payments || []).filter(function(p){ return p.status === 'Confirmed' || p.status === 'Paid'; });
+    var pending = (payments || []).filter(function(p){ return p.status === 'Pending' || p.status === 'Under Review'; });
+
+    // Total paid = sum of confirmed payment amounts
+    var totalPaid = confirmed.reduce(function(s,p){ return s + (p.amount || 0); }, 0);
+
+    // Remaining = live loan balances
+    var totalBalance = active.reduce(function(s,l){ return s + (l.balance || 0); }, 0);
+
+    // Monthly due (Regular recalculates on remaining balance, others flat)
+    var totalMonthly = 0;
+    active.forEach(function(l){
+      if (l.loanType === 'Regular' && l.term > 0) {
+        totalMonthly += Math.round((l.amount || 0) / l.term) + Math.round((l.balance || 0) * 0.01);
+      } else {
+        totalMonthly += l.monthly || 0;
+      }
+    });
+
+    var grandTotal = totalPaid + totalBalance;
+    var pct = grandTotal > 0 ? Math.min(100, Math.round((totalPaid / grandTotal) * 100)) : 0;
+
+    // Update progress ring
+    var ringFg = document.getElementById('ana-ring-fg');
+    var ringPct = document.getElementById('ana-pct');
+    if (ringFg) {
+      var circumference = 326.73; // 2 * PI * 52
+      var offset = circumference - (pct / 100) * circumference;
+      ringFg.style.strokeDashoffset = offset;
+    }
+    if (ringPct) ringPct.textContent = pct + '%';
+
+    // Summary text
+    var summaryEl = document.getElementById('ana-summary');
+    if (summaryEl) {
+      if (active.length === 0) {
+        summaryEl.textContent = 'No active loans. Apply for a loan to see analytics.';
+      } else {
+        summaryEl.textContent = 'You have ' + active.length + ' active loan' + (active.length > 1 ? 's' : '') + '. ' + fmt(totalPaid) + ' paid out of ' + fmt(grandTotal) + ' total.';
+      }
+    }
+
+    // Stat cards
+    var elPaid = document.getElementById('ana-total-paid');
+    var elRemaining = document.getElementById('ana-remaining');
+    var elMonthly = document.getElementById('ana-monthly');
+    var elEta = document.getElementById('ana-eta');
+    if (elPaid) elPaid.textContent = fmt(totalPaid);
+    if (elRemaining) elRemaining.textContent = fmt(totalBalance);
+    if (elMonthly) elMonthly.textContent = fmt(totalMonthly);
+    if (elEta) {
+      if (totalMonthly > 0 && totalBalance > 0) {
+        var monthsLeft = Math.ceil(totalBalance / totalMonthly);
+        var etaDate = new Date();
+        etaDate.setMonth(etaDate.getMonth() + monthsLeft);
+        var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        elEta.textContent = months[etaDate.getMonth()] + ' ' + etaDate.getFullYear();
+      } else if (totalBalance <= 0 && active.length > 0) {
+        elEta.textContent = 'Complete!';
+      } else {
+        elEta.textContent = '\u2014';
+      }
+    }
+
+    // Per-loan breakdown (paid amounts matched by loan type)
+    var listEl = document.getElementById('ana-loans-list');
+    if (listEl && active.length > 0) {
+      var html = '';
+      active.forEach(function(l) {
+        var lPaid = confirmed
+          .filter(function(p){ return p.loanType === l.loanType; })
+          .reduce(function(s,p){ return s + (p.amount || 0); }, 0);
+        var lTotal = lPaid + (l.balance || 0);
+        var lPct = lTotal > 0 ? Math.min(100, Math.round((lPaid / lTotal) * 100)) : 0;
+        var color = l.loanType === 'Regular' ? '#3B6D11'
+          : l.loanType === 'Commodity' ? '#6B3B9A' : '#185FA5';
+        var bgColor = l.loanType === 'Regular' ? '#EAF3DE'
+          : l.loanType === 'Commodity' ? '#F3EAFB' : '#E6F1FB';
+        html += '<div class="ana-loan-card">';
+        html += '<div class="ana-lc-top">';
+        html += '<div class="ana-lc-type">' + l.loanType + ' Loan</div>';
+        html += '<div class="ana-lc-pct" style="background:' + bgColor + ';color:' + color + ';">' + lPct + '% paid</div>';
+        html += '</div>';
+        html += '<div class="ana-lc-bar-wrap"><div class="ana-lc-bar" style="width:' + lPct + '%;background:' + color + ';"></div></div>';
+        html += '<div class="ana-lc-stats">';
+        html += '<div class="ana-lc-stat"><div class="ana-lc-stat-lbl">Paid</div><div class="ana-lc-stat-val" style="color:' + color + ';">' + fmt(lPaid) + '</div></div>';
+        html += '<div class="ana-lc-stat"><div class="ana-lc-stat-lbl">Remaining</div><div class="ana-lc-stat-val">' + fmt(l.balance) + '</div></div>';
+        html += '<div class="ana-lc-stat"><div class="ana-lc-stat-lbl">Monthly</div><div class="ana-lc-stat-val">' + fmt(l.monthly) + '</div></div>';
+        html += '</div>';
+        html += '</div>';
+      });
+      listEl.innerHTML = html;
+    }
+
+    // Payment summary counts
+    var elConf = document.getElementById('ana-confirmed-count');
+    var elPend = document.getElementById('ana-pending-count');
+    var elTotal = document.getElementById('ana-total-payments');
+    if (elConf) elConf.textContent = confirmed.length;
+    if (elPend) elPend.textContent = pending.length;
+    if (elTotal) elTotal.textContent = (payments || []).length;
+  }
+
+  /* ── Ask Admin ── */
+  function sendAdminQuestion() {
+    var topic = document.getElementById('ask-topic');
+    var msg = document.getElementById('ask-message');
+    var btn = document.getElementById('ask-send-btn');
+    var successEl = document.getElementById('ask-success');
+    if (!msg || !msg.value.trim()) { showToast('Please enter your message.'); return; }
+
+    var member = null;
+    try { member = JSON.parse(localStorage.getItem('campuscoop_current_member')); } catch(e) {}
+    if (!member) { showToast('Please log in first.'); return; }
+
+    if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
+    google.script.run
+      .withSuccessHandler(function(r) {
+        if (btn) { btn.disabled = false; btn.innerHTML = '&#9993; Send to Admin'; }
+        if (r && r.success) {
+          if (successEl) successEl.style.display = 'block';
+          if (msg) msg.value = '';
+          setTimeout(function(){ if (successEl) successEl.style.display = 'none'; }, 5000);
+        } else {
+          showToast('Error: ' + (r && r.message || 'Failed to send.'));
+        }
+      })
+      .withFailureHandler(function(e) {
+        if (btn) { btn.disabled = false; btn.innerHTML = '&#9993; Send to Admin'; }
+        showToast('Error: ' + e.message);
+      })
+      .sendMemberQuestion({
+        memberId: member.username || '',
+        memberName: (member.firstName || '') + ' ' + (member.lastName || ''),
+        memberEmail: member.email || '',
+        subject: topic ? topic.value : 'General',
+        message: msg.value.trim()
+      });
+  }
+
+  /* ── Change Member Password ── */
+  function changeMemberPW() {
+    var current = (document.getElementById('pw-current').value || '').trim();
+    var newPw = (document.getElementById('pw-new').value || '').trim();
+    var confirm = (document.getElementById('pw-confirm').value || '').trim();
+    var btn = document.getElementById('pw-save-btn');
+    var msgEl = document.getElementById('pw-save-msg');
+
+    if (!current) { showToast('Please enter your current password.'); return; }
+    if (!newPw) { showToast('Please enter a new password.'); return; }
+    if (newPw.length < 4) { showToast('New password must be at least 4 characters.'); return; }
+    if (newPw !== confirm) { showToast('New passwords do not match.'); return; }
+
+    var member = null;
+    try { member = JSON.parse(localStorage.getItem('campuscoop_current_member')); } catch(e) {}
+    if (!member) { showToast('Please log in first.'); return; }
+
+    if (btn) { btn.disabled = true; btn.textContent = 'Updating...'; }
+
+    google.script.run
+      .withSuccessHandler(function(r) {
+        if (r && r.success) {
+          if (msgEl) { msgEl.textContent = '\u2713 Password updated!'; msgEl.style.color = '#3B6D11'; msgEl.style.display = 'inline'; }
+          document.getElementById('pw-current').value = '';
+          document.getElementById('pw-new').value = '';
+          document.getElementById('pw-confirm').value = '';
+          // Clear "Keep me logged in" so they re-login with new password
+          try { localStorage.removeItem('campuscoop_remember'); } catch(e) {}
+          setTimeout(function() { if (msgEl) msgEl.style.display = 'none'; }, 4000);
+        } else {
+          if (msgEl) { msgEl.textContent = '\u2717 ' + ((r && r.message) || 'Failed to update.'); msgEl.style.color = '#A32D2D'; msgEl.style.display = 'inline'; }
+          setTimeout(function() { if (msgEl) msgEl.style.display = 'none'; }, 4000);
+        }
+        if (btn) { btn.disabled = false; btn.textContent = 'Update Password'; }
+      })
+      .withFailureHandler(function(e) {
+        showToast('Error: ' + e.message);
+        if (btn) { btn.disabled = false; btn.textContent = 'Update Password'; }
+      })
+      .changeMemberPassword(member.username, current, newPw);
+  }
+  /* ── Change Member ID (Login ID) ── */
+  function changeMemberId() {
+    var member = null;
+    try { member = JSON.parse(localStorage.getItem('campuscoop_current_member')); } catch(e) {}
+    if (!member || !member.username) { showToast('Not logged in.'); return; }
+
+    var currentPw = (document.getElementById('mid-current-pw').value || '').trim();
+    var newId = (document.getElementById('mid-new').value || '').trim();
+    var confirmId = (document.getElementById('mid-confirm').value || '').trim();
+
+    if (!currentPw || !newId || !confirmId) { showToast('Please fill in all fields.'); return; }
+    if (newId !== confirmId) { showToast('New Member ID does not match.'); return; }
+    if (newId === member.username) { showToast('New Member ID is the same as current.'); return; }
+
+    var btn = document.getElementById('mid-save-btn');
+    var msg = document.getElementById('mid-save-msg');
+    if (btn) { btn.disabled = true; btn.textContent = 'Updating...'; }
+    if (msg) msg.style.display = 'none';
+
+    google.script.run
+      .withSuccessHandler(function(r) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Update Member ID'; }
+        if (r && r.success) {
+          // Update localStorage with new username
+          member.username = newId;
+          try { localStorage.setItem('campuscoop_current_member', JSON.stringify(member)); } catch(e) {}
+          // Update display
+          var idDisp = document.getElementById('prof-id');
+          if (idDisp) idDisp.textContent = newId;
+          // Update welcome text
+          var sfName = document.getElementById('sf-name');
+          if (sfName) sfName.textContent = member.firstName + ' ' + member.lastName;
+          var sfAv = document.getElementById('sf-av');
+          if (sfAv) sfAv.textContent = (member.firstName || 'M').charAt(0);
+          if (msg) { msg.textContent = '\u2713 Member ID updated! Please log in again with your new ID.'; msg.style.display = 'inline'; }
+          showToast('Member ID updated! Please log in again.');
+          setTimeout(function() { doMemberLogout(); }, 2000);
+        } else {
+          showToast('Error: ' + (r && r.message || 'Failed to update.'));
+        }
+      })
+      .withFailureHandler(function(e) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Update Member ID'; }
+        showToast('Error: ' + e.message);
+      })
+      .changeMemberId(member.username, currentPw, newId);
+  }
+
+  /* ── Messenger-style logout: clear session but keep remembered phone+name ── */
+  function doMemberLogout() {
+    try { localStorage.removeItem('campuscoop_current_member'); } catch(e) {}
+    // campuscoop_remember is intentionally KEPT so the welcome-back screen shows
+    top.location.href = window.SCRIPT_URL + '?page=login';
+  }
+
+  /* ── CBU History ── */
+  function renderCbuHistory() {
+    var member = null;
+    try { member = JSON.parse(localStorage.getItem('campuscoop_current_member')); } catch(e) {}
+    if (!member || !member.username) return;
+
+    google.script.run
+      .withSuccessHandler(function(r) {
+        var loading = document.getElementById('cbu-history-loading');
+        var content = document.getElementById('cbu-history-content');
+        if (loading) loading.style.display = 'none';
+        if (!r || !r.success) {
+          if (content) content.style.display = 'none';
+          return;
+        }
+
+        document.getElementById('cbu-cur').textContent = '\u20B1' + r.currentCbu.toLocaleString();
+        document.getElementById('cbu-deducted').textContent = '\u20B1' + r.totalDeducted.toLocaleString();
+
+        var tbody = document.getElementById('cbu-history-table');
+        var empty = document.getElementById('cbu-history-empty');
+
+        if (!r.deductions || r.deductions.length === 0) {
+          if (tbody) tbody.innerHTML = '';
+          if (empty) empty.style.display = 'block';
+        } else {
+          if (empty) empty.style.display = 'none';
+          var typeColors = { 'Regular': '#3B6D11', 'Commodity': '#6B3B9A', 'Short Term': '#185FA5' };
+          var html = '';
+          r.deductions.forEach(function(d) {
+            var color = typeColors[d.loanType] || '#374151';
+            var badge = d.status === 'Paid'
+              ? '<span style="font-size:10px;background:#D1FAE5;color:#065F46;padding:2px 7px;border-radius:10px;font-weight:600;">Paid</span>'
+              : '<span style="font-size:10px;background:#DBEAFE;color:#1E40AF;padding:2px 7px;border-radius:10px;font-weight:600;">' + d.status + '</span>';
+            html += '<tr><td style="padding:8px 10px;border-top:0.5px solid #F3F4F6;font-weight:600;font-size:11px;">' + d.loanId + '</td>'
+              + '<td style="padding:8px 10px;border-top:0.5px solid #F3F4F6;color:' + color + ';font-weight:600;font-size:11px;">' + d.loanType + '</td>'
+              + '<td style="padding:8px 10px;border-top:0.5px solid #F3F4F6;font-family:DM Mono,monospace;font-size:12px;">\u20B1' + d.amount.toLocaleString() + '</td>'
+              + '<td style="padding:8px 10px;border-top:0.5px solid #F3F4F6;font-size:11px;">' + d.date + '</td>'
+              + '<td style="padding:8px 10px;border-top:0.5px solid #F3F4F6;">' + badge + '</td></tr>';
+          });
+          if (tbody) tbody.innerHTML = html;
+        }
+
+        if (content) content.style.display = 'block';
+      })
+      .withFailureHandler(function() {
+        var loading = document.getElementById('cbu-history-loading');
+        if (loading) loading.textContent = 'Could not load CBU history.';
+      })
+      .getCbuHistory(member.username);
+  }
+
+  /* ══════════════════════════════════════════════
+     DEDUCTION PREVIEW — Member Loan Application
+  ══════════════════════════════════════════════ */
+  var _dedDef = { regOn:true, stlOn:true, comOn:true, stlCbuRate:1, stlService:0, stlInsurancePct:1.62, regCbuRate:2, regService:0, regInsurancePct:1.62, regNotarial:0, comCbuRate:1, comService:0 };
+
+  function loadDedDefaults() {
+    google.script.run
+      .withSuccessHandler(function(r) {
+        if (!r || !r.success) return;
+        _dedDef = r;
+        // Store CBU multiplier percentages globally
+        window._cbuSettings = {
+          stPct:  Number(r.stCbuPct)  || 80,
+          regPct: Number(r.regCbuPct) || 300,
+          comPct: Number(r.comCbuPct) || 80
+        };
+        // Show/hide preview panels based on toggle
+        var stlPrev = document.getElementById('stl-ded-preview');
+        var regPrev = document.getElementById('reg-ded-preview');
+        var comPrev = document.getElementById('com-ded-preview');
+        if (stlPrev) stlPrev.style.display = r.stlOn !== false ? 'block' : 'none';
+        if (regPrev) regPrev.style.display = r.regOn !== false ? 'block' : 'none';
+        if (comPrev) comPrev.style.display = r.comOn !== false ? 'block' : 'none';
+        // Refresh CBU widget now that we have percentages
+        updateCbuWidget();
+      })
+      .withFailureHandler(function(){})
+      .getDeductionSettings();
+  }
+
+  /* ── CBU Widget + Max Loanable Calculator ── */
+  function updateCbuWidget() {
+    var capital = window._memberCapital || 0;
+    var cbu = window._cbuSettings || { stPct: 80, regPct: 300, comPct: 80 };
+
+    // Compute raw max (based on CBU %) then cap at product limits
+    var rawStl = Math.floor(capital * cbu.stPct / 100 / 500) * 500;
+    var rawReg = Math.floor(capital * cbu.regPct / 100 / 5000) * 5000;
+    var rawCom = Math.floor(capital * cbu.comPct / 100 / 500) * 500;
+
+    var maxStl = Math.min(15000, Math.max(1000, rawStl));
+    var maxReg = Math.min(200000, Math.max(5000, rawReg));
+    var maxCom = Math.min(5000, Math.max(500, rawCom));
+
+    // If capital is 0 / very low, use absolute product limits
+    if (capital <= 0) {
+      maxStl = 15000; maxReg = 200000; maxCom = 5000;
+    }
+
+    window._maxLoanable = { stl: maxStl, reg: maxReg, com: maxCom };
+
+    var el = function(id){ return document.getElementById(id); };
+    var f = fmt;
+
+    // Dashboard CBU widget
+    if (el('cbu-amount')) el('cbu-amount').textContent = f(capital);
+    if (el('cbu-max-stl')) el('cbu-max-stl').textContent = f(maxStl);
+    if (el('cbu-max-reg')) el('cbu-max-reg').textContent = f(maxReg);
+    if (el('cbu-max-com')) el('cbu-max-com').textContent = f(maxCom);
+    if (el('cbu-pct-stl')) el('cbu-pct-stl').textContent = cbu.stPct + '% of CBU';
+    if (el('cbu-pct-reg')) el('cbu-pct-reg').textContent = cbu.regPct + '% of CBU';
+    if (el('cbu-pct-com')) el('cbu-pct-com').textContent = cbu.comPct + '% of CBU';
+
+    // Progress bar — show CBU vs max possible (200k for regular as reference)
+    var barPct = capital > 0 ? Math.min(100, Math.round(capital / 200000 * 100)) : 0;
+    if (el('cbu-bar')) el('cbu-bar').style.width = barPct + '%';
+    if (el('cbu-bar-label')) {
+      if (capital <= 0) {
+        el('cbu-bar-label').textContent = 'No capital recorded yet';
+      } else {
+        el('cbu-bar-label').textContent = 'CBU covers up to ' + f(maxReg) + ' on Regular Loan';
+      }
+    }
+
+    // Apply cards on dashboard
+    if (el('apply-max-stl')) el('apply-max-stl').textContent = 'Max \u20B1' + maxStl.toLocaleString() + ' (CBU-based)';
+    if (el('apply-max-reg')) el('apply-max-reg').textContent = 'Max \u20B1' + maxReg.toLocaleString() + ' (CBU-based)';
+    if (el('apply-max-com')) el('apply-max-com').textContent = 'Max \u20B1' + maxCom.toLocaleString() + ' (CBU-based)';
+  }
+
+  /* helper: get total active loan balance by type */
+  function _loanBal(type) {
+    var loans = window._allActiveLoans || [];
+    var total = 0;
+    loans.forEach(function(l) {
+      if (!type || l.loanType === type) total += (l.balance || 0);
+    });
+    return total;
+  }
+
+  /* SHORT TERM deduction preview */
+  function updateDedPreviewSTL(amt) {
+    var el = function(id) { return document.getElementById(id); };
+    var service = _dedDef.stlService || 0;
+    var insPct = _dedDef.stlInsurancePct !== undefined ? _dedDef.stlInsurancePct : 0;
+    var insurance = amt * insPct / 100;
+    var totalC = service + insurance;
+    var net = amt - totalC;
+    if (el('stl-ded-amt'))    el('stl-ded-amt').textContent = fmt(amt);
+    if (el('stl-ded-service'))el('stl-ded-service').textContent = fmt(service);
+    if (el('stl-ded-insurance')) el('stl-ded-insurance').textContent = fmt(insurance);
+    if (el('stl-ded-totalc')) el('stl-ded-totalc').textContent = fmt(totalC);
+    if (el('stl-ded-net'))    el('stl-ded-net').textContent = fmt(net);
+  }
+
+  /* REGULAR deduction preview */
+  function updateDedPreviewREG(amt) {
+    var el = function(id) { return document.getElementById(id); };
+    var pastSTL = _loanBal('Short Term');
+    var pastCom = _loanBal('Commodity');
+    var totalB = pastSTL + pastCom;
+    var cbuRate = _dedDef.regCbuRate || 2;
+    var cbu = Math.round(amt * cbuRate / 100);
+    var service = _dedDef.regService || 0;
+    var insPct = _dedDef.regInsurancePct !== undefined ? _dedDef.regInsurancePct : (_dedDef.regInsurance || 0);
+    var insurance = amt * insPct / 100;
+    var notarial = _dedDef.regNotarial || 0;
+    var totalC = cbu + service + insurance + notarial;
+    var net = amt - totalB - totalC;
+    if (el('reg-ded-amt'))       el('reg-ded-amt').textContent = fmt(amt);
+    if (el('reg-ded-past-stl'))  el('reg-ded-past-stl').textContent = fmt(pastSTL);
+    if (el('reg-ded-past-com'))  el('reg-ded-past-com').textContent = fmt(pastCom);
+    if (el('reg-ded-past-canteen')) el('reg-ded-past-canteen').textContent = fmt(0);
+    if (el('reg-ded-past-ticket'))  el('reg-ded-past-ticket').textContent = fmt(0);
+    if (el('reg-ded-past-others'))  el('reg-ded-past-others').textContent = fmt(0);
+    if (el('reg-ded-totalb'))    el('reg-ded-totalb').textContent = fmt(totalB);
+    if (el('reg-ded-cbu-label')) el('reg-ded-cbu-label').textContent = 'Capital Build-Up (' + cbuRate + '%)';
+    if (el('reg-ded-cbu'))       el('reg-ded-cbu').textContent = fmt(cbu);
+    if (el('reg-ded-service'))   el('reg-ded-service').textContent = fmt(service);
+    if (el('reg-ded-insurance')) el('reg-ded-insurance').textContent = fmt(insurance);
+    if (el('reg-ded-notarial'))  el('reg-ded-notarial').textContent = fmt(notarial);
+    if (el('reg-ded-totalc'))    el('reg-ded-totalc').textContent = fmt(totalC);
+    if (el('reg-ded-net'))       el('reg-ded-net').textContent = fmt(net);
+  }
+
+  /* COMMODITY deduction preview */
+  function updateDedPreviewCOM(amt) {
+    var el = function(id) { return document.getElementById(id); };
+    var cbuRate = _dedDef.comCbuRate || 1;
+    var cbu = Math.round(amt * cbuRate / 100);
+    var service = _dedDef.comService || 0;
+    var totalC = cbu + service;
+    var net = amt - totalC;
+    if (el('com-ded-amt'))    el('com-ded-amt').textContent = fmt(amt);
+    if (el('com-ded-cbu-label')) el('com-ded-cbu-label').textContent = 'Capital Build-Up (' + cbuRate + '%)';
+    if (el('com-ded-cbu'))    el('com-ded-cbu').textContent = fmt(cbu);
+    if (el('com-ded-service'))el('com-ded-service').textContent = fmt(service);
+    if (el('com-ded-totalc')) el('com-ded-totalc').textContent = fmt(totalC);
+    if (el('com-ded-net'))    el('com-ded-net').textContent = fmt(net);
+  }
+
+
+
+</script>

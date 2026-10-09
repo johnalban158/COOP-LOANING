@@ -1,0 +1,201 @@
+<script>
+/* ── Payment Reminders Page (client-side) — Email Only ── */
+
+function loadSmsPage() {
+  google.script.run
+    .withSuccessHandler(function(data) {
+      if (!data) return;
+      renderRemSettings(data.settings);
+      renderDueReminders(data.reminders);
+      renderRemLog(data.logs);
+    })
+    .withFailureHandler(function(e) { showToast('Error loading reminders: ' + e.message); })
+    .getSmsPageData();
+}
+
+function renderRemSettings(s) {
+  if (!s) return;
+  // Auto toggle
+  var toggle = document.getElementById('rem-auto-toggle');
+  var label = document.getElementById('rem-auto-label');
+  if (toggle && label) {
+    if (s.autoEnabled) { toggle.classList.add('on'); label.textContent = 'Enabled \u2014 reminders sent daily at 8:00 AM'; }
+    else { toggle.classList.remove('on'); label.textContent = 'Disabled \u2014 reminders are sent manually'; }
+  }
+}
+
+function renderDueReminders(data) {
+  var tbody = document.getElementById('rem-due-tbody');
+  var statUp = document.getElementById('rem-stat-upcoming');
+  var statEm = document.getElementById('rem-stat-withphone');
+  var statNone = document.getElementById('rem-stat-nocontact');
+  var sendBtn = document.getElementById('rem-send-all-btn');
+  if (!tbody) return;
+
+  if (!data || !data.success || !data.reminders || data.reminders.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8"><div class="rem-empty">'
+      + '<div class="rem-empty-icon">&#10003;</div>'
+      + '<div class="rem-empty-text">No upcoming payment dues. All members are up to date!</div>'
+      + '</div></td></tr>';
+    if (statUp) statUp.textContent = '0';
+    if (statEm) statEm.textContent = '0';
+    if (statNone) statNone.textContent = '0';
+    if (sendBtn) sendBtn.disabled = true;
+    return;
+  }
+
+  var list = data.reminders;
+  var wEm = data.stats.withEmail || 0;
+  var noEmail = 0;
+  list.forEach(function(r) { if (!r.hasEmail) noEmail++; });
+  var canSend = list.length - noEmail;
+
+  if (statUp) statUp.textContent = list.length;
+  if (statEm) statEm.textContent = wEm;
+  if (statNone) statNone.textContent = noEmail;
+  if (sendBtn) sendBtn.disabled = (canSend === 0);
+
+  var html = '';
+  for (var i = 0; i < list.length; i++) {
+    var r = list[i];
+    var emailCell = r.hasEmail
+      ? '<span class="rem-badge" style="font-size:10px;background:#E6F1FB;color:#185FA5;">&#9993; ' + r.email.split('@')[0] + '@...</span>'
+      : '<span class="rem-badge no-email">No email</span>';
+
+    var canSendThis = r.hasEmail;
+    var actionCell = canSendThis
+      ? '<button class="rem-btn send" id="rem-s-' + i + '" onclick="sendOneRem(' + i + ')">&#9993; Send Email</button>'
+      : '<span style="font-size:11px;color:#aaa;">\u2014</span>';
+    var dueStyle = r.dueLabel.indexOf('Overdue') > -1 ? 'color:#A32D2D;font-weight:600;'
+      : r.dueLabel === 'Tomorrow' ? 'color:#854F0B;font-weight:600;'
+      : r.dueLabel === 'Today' ? 'color:#A32D2D;font-weight:700;' : '';
+
+    html += '<tr>'
+      + '<td><strong>' + r.memberName + '</strong><br/><span style="font-size:11px;color:#888;">' + r.memberId + '</span></td>'
+      + '<td style="font-family:\'DM Mono\',monospace;font-size:12px;">' + r.loanId + '</td>'
+      + '<td>' + r.loanType + '</td>'
+      + '<td>Month ' + r.monthNum + '</td>'
+      + '<td style="font-weight:600;">&#8369;' + Number(r.monthly).toLocaleString() + '</td>'
+      + '<td style="' + dueStyle + '">' + r.dueLabel + '</td>'
+      + '<td>' + emailCell + '</td>'
+      + '<td>' + actionCell + '</td></tr>';
+  }
+  tbody.innerHTML = html;
+  window._remData = list;
+}
+
+function renderRemLog(data) {
+  var tbody = document.getElementById('rem-log-tbody');
+  var statToday = document.getElementById('rem-stat-today');
+  if (!tbody) return;
+
+  if (!data || !data.success || !data.logs || data.logs.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5"><div class="rem-empty">'
+      + '<div class="rem-empty-icon">&#128203;</div>'
+      + '<div class="rem-empty-text">No reminders sent yet.</div>'
+      + '</div></td></tr>';
+    if (statToday) statToday.textContent = '0';
+    return;
+  }
+
+  var logs = data.logs;
+  var todayStr = new Date().toISOString().split('T')[0];
+  var todayN = 0;
+  var html = '';
+  for (var i = 0; i < Math.min(logs.length, 50); i++) {
+    var l = logs[i];
+    if (l.timestamp.indexOf(todayStr) === 0) todayN++;
+    var isSent = l.status.indexOf('Sent') === 0;
+    var badge = isSent
+      ? '<span class="rem-badge sent">' + l.status + '</span>'
+      : '<span class="rem-badge failed">' + l.status + '</span>';
+    html += '<tr>'
+      + '<td style="font-size:12px;color:#888;white-space:nowrap;">' + l.timestamp + '</td>'
+      + '<td><strong>' + l.memberName + '</strong><br/><span style="font-size:11px;color:#888;">' + l.memberId + '</span></td>'
+      + '<td style="font-size:11px;color:#555;">' + (l.email || '\u2014') + '</td>'
+      + '<td style="font-family:\'DM Mono\',monospace;font-size:11px;">' + l.loanId + '</td>'
+      + '<td>' + badge + '</td></tr>';
+  }
+  tbody.innerHTML = html;
+  if (statToday) statToday.textContent = todayN;
+}
+
+/* Send single via email */
+function sendOneRem(idx) {
+  var r = window._remData && window._remData[idx];
+  if (!r) { showToast('Data not found.'); return; }
+  var btn = document.getElementById('rem-s-' + idx);
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res && res.success) {
+        if (btn) { btn.textContent = '\u2713 Email Sent'; btn.className = 'rem-btn'; btn.style.color = '#3B6D11'; }
+        showToast('Email reminder sent to ' + r.memberName + '!');
+      } else {
+        if (btn) { btn.textContent = '\u2717 Failed'; btn.disabled = false; btn.style.color = '#A32D2D'; }
+        showToast('Failed: ' + (res && res.message ? res.message : 'Unknown error'));
+      }
+    })
+    .withFailureHandler(function(e) {
+      if (btn) { btn.textContent = '\u2717 Error'; btn.disabled = false; }
+      showToast('Error: ' + e.message);
+    })
+    .sendSingleReminder(r.memberId, r.loanId, r.memberName, r.loanType, r.monthly, r.nextDue, r.monthNum);
+}
+
+/* Send all via email */
+function sendAllDue() {
+  var btn = document.getElementById('rem-send-all-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending all emails...'; }
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res && res.success) {
+        var msg = 'Done! Emails sent: ' + res.sent;
+        if (res.failed > 0) msg += ', Failed: ' + res.failed;
+        if (res.skipped > 0) msg += ', Skipped (no email): ' + res.skipped;
+        showToast(msg);
+        if (btn) btn.textContent = '\u2713 All Emails Sent';
+        setTimeout(loadSmsPage, 1500);
+      } else {
+        showToast('Failed: ' + (res && res.message ? res.message : 'Unknown error'));
+        if (btn) { btn.disabled = false; btn.textContent = '\u2709 Send All Email Reminders'; }
+      }
+    })
+    .withFailureHandler(function(e) {
+      showToast('Error: ' + e.message);
+      if (btn) { btn.disabled = false; btn.textContent = '\u2709 Send All Email Reminders'; }
+    })
+    .sendAllDueReminders();
+}
+
+/* Toggle auto daily */
+function toggleAutoReminder() {
+  var toggle = document.getElementById('rem-auto-toggle');
+  var label = document.getElementById('rem-auto-label');
+  var isOn = toggle && toggle.classList.contains('on');
+
+  if (label) label.textContent = isOn ? 'Disabling...' : 'Enabling...';
+  toggle.style.opacity = '0.5';
+  toggle.style.pointerEvents = 'none';
+
+  if (isOn) {
+    google.script.run
+      .withSuccessHandler(function(r) {
+        toggle.style.opacity = '1'; toggle.style.pointerEvents = 'auto';
+        if (r && r.success) { toggle.classList.remove('on'); if (label) label.textContent = 'Disabled \u2014 reminders are sent manually'; showToast('Auto-reminders disabled.'); }
+        else { if (label) label.textContent = 'Enabled \u2014 reminders sent daily at 8:00 AM'; showToast('Error: ' + (r && r.message || 'Could not disable.')); }
+      })
+      .withFailureHandler(function(e) { toggle.style.opacity = '1'; toggle.style.pointerEvents = 'auto'; if (label) label.textContent = 'Enabled \u2014 reminders sent daily at 8:00 AM'; showToast('Error: ' + e.message); })
+      .removeDailyReminderTrigger();
+  } else {
+    google.script.run
+      .withSuccessHandler(function(r) {
+        toggle.style.opacity = '1'; toggle.style.pointerEvents = 'auto';
+        if (r && r.success) { toggle.classList.add('on'); if (label) label.textContent = 'Enabled \u2014 reminders sent daily at 8:00 AM'; showToast('Auto-reminders enabled! Emails will send at 8 AM daily.'); }
+        else { if (label) label.textContent = 'Disabled \u2014 ' + (r && r.message || 'could not enable'); showToast('Error. Run createReminderTriggerOnce() in Apps Script Editor first.'); }
+      })
+      .withFailureHandler(function(e) { toggle.style.opacity = '1'; toggle.style.pointerEvents = 'auto'; showToast('Error: ' + e.message); })
+      .setupDailyReminderTrigger();
+  }
+}
+</script>

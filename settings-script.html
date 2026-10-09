@@ -1,0 +1,1044 @@
+<script>
+function saveAndConnect() {
+  var id = (document.getElementById(
+    'ss-id-input') &&
+    document.getElementById(
+    'ss-id-input').value || '').trim();
+  if (!id) {
+    showToast('Paste your Spreadsheet ID first.');
+    return;
+  }
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r && r.success) {
+        var st = document.getElementById('db-status');
+        var tx = document.getElementById('db-status-text');
+        if (st) st.className = 'db-status ds-on';
+        if (tx) tx.textContent = 'Connected: ' + r.name;
+        var di = document.getElementById('db-info');
+        if (di) di.textContent = 'Connected: ' + r.name;
+        var allRequired = ['Members','Loans','Payments','Application','SHORT-TERM','REGULAR','COMMODITY'];
+        allRequired.forEach(function(name) {
+            var el = document.getElementById('sheet-' + name);
+            if (!el) return;
+            var found = r.sheets && r.sheets.some(function(s){ return s.toLowerCase() === name.toLowerCase(); });
+            el.textContent = found ? 'Found \u2713' : 'Missing';
+            el.className = 'sheet-badge ' + (found ? 'sb-ok' : 'sb-miss');
+          });
+        showToast('Spreadsheet connected!');
+      } else {
+        showToast('Failed: ' + (r && r.message ? r.message : 'Invalid Spreadsheet ID'));
+      }
+    })
+    .withFailureHandler(function(e) { showToast('Error: ' + e.message); })
+    .saveSpreadsheetID(id);
+}
+
+function testConnection() {
+  var id = (document.getElementById(
+    'ss-id-input') &&
+    document.getElementById(
+    'ss-id-input').value || '').trim();
+  if (!id) { showToast('Paste your Spreadsheet ID first.'); return; }
+  google.script.run
+    .withSuccessHandler(function(r) {
+      showToast(r && r.success
+        ? 'Connected! Sheet: ' + r.name
+        : 'Failed: ' + (r && r.message));
+    })
+    .withFailureHandler(function(e) { showToast('Error: ' + e.message); })
+    .testDatabaseConnection(id);
+}
+
+function saveSchoolYear() {
+  var sy = (document.getElementById('sy-input') &&
+    document.getElementById('sy-input').value || '').trim();
+  if (!sy) { showToast('Please enter a school year.'); return; }
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r && r.success) {
+        var sd = document.getElementById('sy-display');
+        if (sd) sd.textContent = sy;
+        showToast('School year saved!');
+      } else {
+        showToast('Error: ' + (r && r.message ? r.message : 'Failed'));
+      }
+    })
+    .withFailureHandler(function(e) { showToast('Error: ' + e.message); })
+    .saveSettings({ schoolYear: sy });
+}
+
+function updatePassword() {
+  var pw1 = (document.getElementById('pw-new') &&
+    document.getElementById('pw-new').value || '').trim();
+  var pw2 = (document.getElementById('pw-confirm') &&
+    document.getElementById('pw-confirm').value || '').trim();
+  if (!pw1) { showToast('Enter a new password.'); return; }
+  if (pw1 !== pw2) { showToast('Passwords do not match.'); return; }
+  if (pw1.length < 4) { showToast('Password too short. Min 4 chars.'); return; }
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r && r.success) {
+        document.getElementById('pw-new').value = '';
+        document.getElementById('pw-confirm').value = '';
+        showToast('Password updated!');
+      } else {
+        showToast('Error: ' + (r && r.message ? r.message : 'Failed'));
+      }
+    })
+    .withFailureHandler(function(e) { showToast('Error: ' + e.message); })
+    .saveSettings({ adminPassword: pw1 });
+}
+
+function clearSessions() {
+  google.script.run
+    .withSuccessHandler(function() { showToast('All sessions cleared!'); })
+    .withFailureHandler(function(e) { showToast('Error: ' + e.message); })
+    .logout();
+}
+
+function resetData() {
+  showToast('Connect spreadsheet first before resetting data.');
+}
+
+function runGenerateDemoData() {
+  if (!confirm('This will create sample loans and payment records for your demo/presentation. Are you sure you want to proceed?')) return;
+
+  var btn = document.getElementById('demo-data-btn');
+  var result = document.getElementById('demo-data-result');
+  if (btn) { btn.disabled = true; btn.textContent = 'Generating...'; }
+  if (result) { result.style.display = 'none'; }
+
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (btn) { btn.disabled = false; btn.textContent = '\u26A1 Generate Demo Data'; }
+      if (!result) return;
+      result.style.display = 'block';
+      if (r && r.success) {
+        result.className = 'ok';
+        result.style.cssText = 'display:block;margin-top:10px;padding:10px 14px;border-radius:8px;font-size:12px;background:#EAF3DE;border:1px solid #C0DD97;color:#3B6D11;';
+        var html = '<div style="font-weight:700;margin-bottom:6px;">\u2713 Demo data generated!</div>'
+          + '<table style="font-size:12px;border-collapse:collapse;width:100%;">'
+          + '<tr><td style="padding:3px 8px;color:#555;">Loans created</td><td style="padding:3px 8px;font-weight:600;">' + (r.loansCreated || 0) + '</td></tr>'
+          + '<tr><td style="padding:3px 8px;color:#555;">Payments recorded</td><td style="padding:3px 8px;font-weight:600;">' + (r.paymentsCreated || 0) + '</td></tr>'
+          + '<tr><td style="padding:3px 8px;color:#555;">Total amount paid</td><td style="padding:3px 8px;font-weight:600;">\u20B1' + Math.round(r.totalAmountPaid || 0).toLocaleString() + '</td></tr>'
+          + '<tr><td style="padding:3px 8px;color:#555;">Accounts processed</td><td style="padding:3px 8px;font-weight:600;">' + (r.totalLoansProcessed || 0) + '</td></tr>'
+          + '<tr><td style="padding:3px 8px;color:#555;">Fully paid</td><td style="padding:3px 8px;font-weight:600;">' + (r.fullyPaid || 0) + '</td></tr>'
+          + '<tr><td style="padding:3px 8px;color:#555;">Still active</td><td style="padding:3px 8px;font-weight:600;">' + (r.stillActive || 0) + '</td></tr>'
+          + '</table>';
+        if (r.log && r.log.length > 0) {
+          html += '<details style="margin-top:8px;"><summary style="cursor:pointer;font-size:11px;color:#888;font-weight:600;">View details<\/summary>'
+            + '<div style="margin-top:6px;max-height:200px;overflow-y:auto;background:#F4F2EE;border-radius:6px;padding:8px 10px;font-size:11px;color:#555;font-family:monospace;">';
+          r.log.forEach(function(l) { html += '<div>' + l + '<\/div>'; });
+          html += '<\/div><\/details>';
+        }
+        result.innerHTML = html;
+        showToast('\u2713 Demo data generated! Check the Payments and Loans pages.');
+      } else {
+        result.className = 'err';
+        result.style.cssText = 'display:block;margin-top:10px;padding:10px 14px;border-radius:8px;font-size:12px;background:#FCEBEB;border:1px solid #F7C1C1;color:#A32D2D;';
+        result.innerHTML = '\u274C Failed: ' + ((r && r.message) || 'Unknown error');
+      }
+    })
+    .withFailureHandler(function(e) {
+      if (btn) { btn.disabled = false; btn.textContent = '\u26A1 Generate Demo Data'; }
+      if (result) {
+        result.style.display = 'block';
+        result.className = 'err';
+        result.style.cssText = 'display:block;margin-top:10px;padding:10px 14px;border-radius:8px;font-size:12px;background:#FCEBEB;border:1px solid #F7C1C1;color:#A32D2D;';
+        result.innerHTML = '\u274C Error: ' + e.message;
+      }
+    })
+    .generateDemoData();
+}
+
+function initSettings() {
+  // Chairperson: show only Officer Management section
+  var role = 'admin';
+  try { role = localStorage.getItem('campuscoop_role') || 'admin'; } catch(e) {}
+  if (role === 'chairperson') {
+    var cards = document.querySelectorAll('.settings-grid .s-card');
+    cards.forEach(function(c) {
+      var title = c.querySelector('.s-title');
+      if (title && title.textContent.indexOf('Manage Officer Accounts') === -1) {
+        c.style.display = 'none';
+      }
+    });
+  }
+  google.script.run
+    .withSuccessHandler(function(s) {
+      if (!s) return;
+      if (s.ssID) {
+        var inp = document.getElementById('ss-id-input');
+        if (inp) inp.value = s.ssID;
+        // Verify the actual connection and update sheet badges
+        saveAndConnect();
+      }
+      if (s.schoolYear) {
+        var sy = document.getElementById('sy-input');
+        if (sy) sy.value = s.schoolYear;
+        var sd = document.getElementById('sy-display');
+        if (sd) sd.textContent = s.schoolYear;
+      }
+    })
+    .withFailureHandler(function() {})
+    .getSettings();
+  loadCbuSettings();
+  loadDeductionDefaults();
+  loadOfficerCreds();  // Loads both legacy and new individual accounts
+}
+
+/* ── Face-to-Face Enrollment ── */
+function onSettAddmTypeChange() {
+    // Logic for dropdown change if needed
+}
+
+function doAddMemberFromSettings() {
+    var first   = (document.getElementById('addm-sett-first').value  || '').trim();
+    var last    = (document.getElementById('addm-sett-last').value   || '').trim();
+    var email   = (document.getElementById('addm-sett-email').value  || '').trim();
+    var phone   = (document.getElementById('addm-sett-phone').value  || '').trim();
+    var pw      = (document.getElementById('addm-sett-pw').value     || '').trim();
+    var dept    = (document.getElementById('addm-sett-dept').value   || '').trim();
+    var capital = Number(document.getElementById('addm-sett-capital').value) || 0;
+    var type    = document.getElementById('addm-sett-type').value;
+    var err     = document.getElementById('addm-sett-err');
+    var ok      = document.getElementById('addm-sett-ok');
+
+    if (err) err.style.display = 'none';
+    if (ok)  ok.style.display  = 'none';
+
+    if (!last || !first || !pw) {
+        if (err) { err.textContent = 'Please fill in all required fields (First name, Last name, Password).'; err.style.display = 'block'; }
+        return;
+    }
+
+    google.script.run
+        .withSuccessHandler(function(r) {
+            if (r && r.success) {
+                if (ok) {
+                    var status = '<br><span style="font-size:11px;color:#666;">'
+                        + '📱 SMS: ' + (r.smsStatus === 'Sent' ? '✅' : '❌ ' + r.smsStatus)
+                        + ' &middot; 📧 Email: ' + (r.emailStatus === 'Sent' ? '✅' : '❌ ' + r.emailStatus)
+                        + '</span>';
+                    ok.innerHTML = '✓ Member account created!' + status;
+                    ok.style.display = 'block';
+                }
+                
+                // Clear inputs
+                ['addm-sett-first','addm-sett-last','addm-sett-email','addm-sett-phone','addm-sett-pw','addm-sett-dept','addm-sett-capital'].forEach(function(id){
+                    var el = document.getElementById(id); if(el) el.value = '';
+                });
+                
+                if (typeof loadMembers === 'function') loadMembers();
+            } else {
+                if (err) { err.textContent = (r && r.message) || 'Failed to create member.'; err.style.display = 'block'; }
+            }
+        })
+        .withFailureHandler(function(e) {
+            if (err) { err.textContent = 'Error: ' + e.message; err.style.display = 'block'; }
+        })
+        .createMember({
+            firstName: first, lastName: last,
+            memberType: type, department: dept,
+            email: email, phone: phone,
+            password: pw, capital: capital
+        });
+}
+
+/* ── Individual Officer Account Management ── */
+
+var _editingOfficerEmail = null;
+
+function loadOfficerCreds() {
+  // Legacy backward compat
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!r || !r.success) return;
+      var roles = ['regular', 'shortterm', 'commodity', 'treasurer', 'chairperson'];
+      roles.forEach(function(role) {
+        var userEl = document.getElementById('off-' + role + '-user');
+        var passEl = document.getElementById('off-' + role + '-pass');
+        var data = r[role];
+        if (data) {
+          if (userEl) userEl.value = data.username || '';
+          if (passEl) passEl.value = data.password || '';
+        }
+      });
+    })
+    .withFailureHandler(function() {})
+    .getOfficerCredentials();
+
+  // Load individual accounts
+  loadOfficerAccountsTable();
+}
+
+function loadOfficerAccountsTable() {
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!r || !r.success) return;
+      var tbody = document.getElementById('off-accounts-tbody');
+      if (!tbody) return;
+      var accounts = r.accounts || [];
+      if (accounts.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="padding:24px;text-align:center;color:#999;">No officer accounts yet. Click "+ Add New Officer" to create one.</td></tr>';
+        return;
+      }
+      var roleLabels = {
+        'regular': 'Regular',
+        'shortterm': 'Short Term',
+        'commodity': 'Commodity',
+        'treasurer': 'Treasurer',
+        'chairperson': 'Chairperson'
+      };
+      var roleColors = {
+        'regular': '#3B6D11',
+        'shortterm': '#854F0B',
+        'commodity': '#6B3B9A',
+        'treasurer': '#185FA5',
+        'chairperson': '#374151'
+      };
+      var html = '';
+      accounts.forEach(function(acc) {
+        var label = roleLabels[acc.role] || acc.role;
+        var color = roleColors[acc.role] || '#666';
+        var statusColor = acc.status === 'Active' ? '#3B6D11' : '#A32D2D';
+        var statusBg = acc.status === 'Active' ? '#EAF3DE' : '#FCEBEB';
+        var statusBorder = acc.status === 'Active' ? '#C0DD97' : '#F7C1C1';
+        html += '<tr style="border-bottom:0.5px solid #E0DDD6;">'
+          + '<td style="padding:8px 10px;font-weight:600;">' + escHtml(acc.fullname) + '</td>'
+          + '<td style="padding:8px 10px;font-family:monospace;font-size:12px;">' + escHtml(acc.email) + '</td>'
+          + '<td style="padding:8px 10px;"><span style="display:inline-block;background:' + color + ';color:#fff;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:600;">' + label + '</span></td>'
+          + '<td style="padding:8px 10px;font-size:12px;color:#666;">' + (acc.mobile || '—') + '</td>'
+          + '<td style="padding:8px 10px;text-align:center;"><span style="display:inline-block;background:' + statusBg + ';color:' + statusColor + ';border:1px solid ' + statusBorder + ';padding:2px 10px;border-radius:20px;font-size:11px;font-weight:600;">' + acc.status + '</span></td>'
+          + '<td style="padding:8px 10px;text-align:center;font-size:11px;color:#888;">' + (acc.schoolYear || '—') + '</td>'
+          + '<td style="padding:8px 10px;text-align:center;">' + (acc.mustChangePassword
+            ? '<span style="display:inline-block;background:#FEF3C7;color:#854F0B;border:1px solid #FCD34D;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600;">⚠ Must change</span>'
+            : '<span style="display:inline-block;background:#EAF3DE;color:#3B6D11;border:1px solid #C0DD97;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600;">✓ Done</span>') + '</td>'
+          + '<td style="padding:8px 10px;text-align:center;">'
+          + '<button class="btn-sec" style="font-size:11px;padding:4px 10px;margin-right:4px;" onclick="editOfficerAccount(\'' + acc.email.replace(/'/g, "\\'") + '\')">Edit</button>'
+          + (acc.status === 'Active'
+            ? '<button class="btn-danger" style="font-size:11px;padding:4px 10px;" onclick="deactivateOfficerAccount(\'' + acc.email.replace(/'/g, "\\'") + '\')">Deactivate</button>'
+            : '<button class="btn-prim" style="font-size:11px;padding:4px 10px;" onclick="reactivateOfficerAccount(\'' + acc.email.replace(/'/g, "\\'") + '\')">Reactivate</button>')
+          + '</td>'
+          + '</tr>';
+      });
+      tbody.innerHTML = html;
+    })
+    .withFailureHandler(function() {})
+    .getOfficerAccounts();
+}
+
+function escHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showAddOfficerForm() {
+  _editingOfficerEmail = null;
+  document.getElementById('officer-form-title').textContent = '\u2795 Add New Officer Account';
+  document.getElementById('off-form-btn').textContent = 'Create Account';
+  document.getElementById('off-form-cancel').style.display = 'none';
+  document.getElementById('off-add-fullname').value = '';
+  document.getElementById('off-add-email').value = '';
+  document.getElementById('off-add-password').value = '';
+  document.getElementById('off-add-role').value = 'regular';
+  document.getElementById('off-add-mobile').value = '';
+  document.getElementById('off-form-err').style.display = 'none';
+  document.getElementById('officer-form').style.display = 'block';
+}
+
+function cancelOfficerForm() {
+  document.getElementById('officer-form').style.display = 'none';
+  _editingOfficerEmail = null;
+}
+
+function editOfficerAccount(email) {
+  _editingOfficerEmail = email;
+  document.getElementById('officer-form-title').textContent = '\u270F Edit Officer Account';
+  document.getElementById('off-form-btn').textContent = 'Update Account';
+  document.getElementById('off-form-cancel').style.display = 'inline-block';
+  document.getElementById('off-form-err').style.display = 'none';
+
+  // Load current data from the table by fetching again
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!r || !r.success) return;
+      var acc = null;
+      r.accounts.forEach(function(a) {
+        if (a.email.toLowerCase() === email.toLowerCase()) acc = a;
+      });
+      if (!acc) { showToast('Account not found.'); return; }
+      document.getElementById('off-add-fullname').value = acc.fullname || '';
+      document.getElementById('off-add-email').value = acc.email || '';
+      document.getElementById('off-add-password').value = ''; // Don't pre-fill password
+      document.getElementById('off-add-role').value = acc.role || 'regular';
+      document.getElementById('off-add-mobile').value = acc.mobile || '';
+      document.getElementById('officer-form').style.display = 'block';
+    })
+    .getOfficerAccounts();
+}
+
+function saveOfficerAccount() {
+  var fullname = (document.getElementById('off-add-fullname').value || '').trim();
+  var email = (document.getElementById('off-add-email').value || '').trim();
+  var password = (document.getElementById('off-add-password').value || '').trim();
+  var role = document.getElementById('off-add-role').value;
+  var mobile = (document.getElementById('off-add-mobile').value || '').trim();
+  var err = document.getElementById('off-form-err');
+
+  if (err) err.style.display = 'none';
+
+  if (!fullname || !email) {
+    if (err) { err.textContent = 'Full name and email are required.'; err.style.display = 'block'; }
+    return;
+  }
+
+  if (!_editingOfficerEmail && !password) {
+    if (err) { err.textContent = 'Password is required for new accounts.'; err.style.display = 'block'; }
+    return;
+  }
+
+  var btn = document.getElementById('off-form-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+
+  if (_editingOfficerEmail) {
+    // Update existing
+    var updateData = { fullname: fullname, role: role, mobile: mobile };
+    if (password) updateData.password = password;
+    if (email.toLowerCase() !== _editingOfficerEmail.toLowerCase()) updateData.email = email;
+
+    google.script.run
+      .withSuccessHandler(function(r) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Update Account'; }
+        if (r && r.success) {
+          showToast('\u2713 Account updated!');
+          cancelOfficerForm();
+          loadOfficerAccountsTable();
+        } else {
+          if (err) { err.textContent = (r && r.message) || 'Update failed.'; err.style.display = 'block'; }
+        }
+      })
+      .withFailureHandler(function(e) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Update Account'; }
+        if (err) { err.textContent = 'Error: ' + e.message; err.style.display = 'block'; }
+      })
+      .updateOfficerAccount(_editingOfficerEmail, updateData);
+  } else {
+    // Create new
+    google.script.run
+      .withSuccessHandler(function(r) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Create Account'; }
+        if (r && r.success) {
+          showToast('\u2713 Account created for ' + fullname + '! An email notification has been sent.');
+          cancelOfficerForm();
+          loadOfficerAccountsTable();
+        } else {
+          if (err) { err.textContent = (r && r.message) || 'Failed to create account.'; err.style.display = 'block'; }
+        }
+      })
+      .withFailureHandler(function(e) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Create Account'; }
+        if (err) { err.textContent = 'Error: ' + e.message; err.style.display = 'block'; }
+      })
+      .createOfficerAccount({
+        fullname: fullname,
+        email: email,
+        password: password,
+        role: role,
+        mobile: mobile
+      });
+  }
+}
+
+function deactivateOfficerAccount(email) {
+  if (!confirm('Deactivate account for ' + email + '? This officer will no longer be able to log in.')) return;
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r && r.success) {
+        showToast('\u2713 Account deactivated.');
+        loadOfficerAccountsTable();
+      } else {
+        showToast('\u274C Error: ' + (r && r.message || 'Failed'));
+      }
+    })
+    .withFailureHandler(function(e) { showToast('Error: ' + e.message); })
+    .deactivateOfficerAccount(email);
+}
+
+function reactivateOfficerAccount(email) {
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r && r.success) {
+        showToast('\u2713 Account reactivated.');
+        loadOfficerAccountsTable();
+      } else {
+        showToast('\u274C Error: ' + (r && r.message || 'Failed'));
+      }
+    })
+    .withFailureHandler(function(e) { showToast('Error: ' + e.message); })
+    .updateOfficerAccount(email, { status: 'Active' });
+}
+
+/* ── Chairman: Officer Assignments page ── */
+
+var _offMemberCache = [];
+var _offFilteredList = [];
+var _offRoles = [
+  { key: 'regular', label: 'Regular', color: '#3B6D11' },
+  { key: 'shortterm', label: 'Short Term', color: '#854F0B' },
+  { key: 'commodity', label: 'Commodity', color: '#6B3B9A' }
+];
+
+function loadOfficersPage() {
+  loadCurrentOfficers();
+  loadOfficerMemberList();
+}
+
+function loadCurrentOfficers() {
+  var tbody = document.getElementById('off-current-tbody');
+  if (!tbody) return;
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!r || !r.success) {
+        tbody.innerHTML = '<tr><td colspan="5" style="padding:24px;text-align:center;color:#999;">Failed to load officers.</td></tr>';
+        return;
+      }
+      var accs = r.accounts || [];
+      var html = '';
+      _offRoles.forEach(function(rl) {
+        var acc = null;
+        accs.forEach(function(a) { if (String(a.role).toLowerCase() === rl.key && !acc) acc = a; });
+        if (acc) {
+          var active = String(acc.status).toLowerCase() === 'active';
+          var badge = active
+            ? '<span style="display:inline-block;background:#EAF3DE;color:#3B6D11;border:1px solid #C0DD97;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:600;">Active</span>'
+            : '<span style="display:inline-block;background:#FCEBEB;color:#A32D2D;border:1px solid #F7C1C1;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:600;">Inactive</span>';
+          html += '<tr style="border-bottom:0.5px solid #F0EDE8;">'
+            + '<td style="padding:10px 14px;font-weight:600;"><span style="display:inline-block;background:' + rl.color + ';color:#fff;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:600;">' + rl.label + '</span></td>'
+            + '<td style="padding:10px 14px;font-weight:600;">' + escHtml(acc.fullname || '&mdash;') + '</td>'
+            + '<td style="padding:10px 14px;font-family:monospace;font-size:12px;">' + escHtml(acc.email) + '</td>'
+            + '<td style="padding:10px 14px;">' + badge + '</td>'
+            + '<td style="padding:10px 14px;text-align:center;"><button class="btn-danger" style="font-size:11px;padding:4px 10px;" onclick="removeAssignedOfficer(\'' + String(acc.email).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + '\')">Remove</button></td>'
+            + '</tr>';
+        } else {
+          html += '<tr style="border-bottom:0.5px solid #F0EDE8;">'
+            + '<td style="padding:10px 14px;font-weight:600;"><span style="display:inline-block;background:' + rl.color + ';color:#fff;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:600;">' + rl.label + '</span></td>'
+            + '<td colspan="3" style="padding:10px 14px;color:#999;">No officer assigned yet</td>'
+            + '<td style="padding:10px 14px;text-align:center;">&mdash;</td>'
+            + '</tr>';
+        }
+      });
+      tbody.innerHTML = html;
+    })
+    .withFailureHandler(function() {
+      tbody.innerHTML = '<tr><td colspan="5" style="padding:24px;text-align:center;color:#999;">Failed to load officers.</td></tr>';
+    })
+    .getOfficerAccounts();
+}
+
+function loadOfficerMemberList() {
+  var tbody = document.getElementById('off-member-tbody');
+  if (!tbody) return;
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!r || !r.success) {
+        tbody.innerHTML = '<tr><td colspan="6" style="padding:24px;text-align:center;color:#999;">Failed to load members.</td></tr>';
+        return;
+      }
+      _offMemberCache = r.members || [];
+      var qEl = document.getElementById('off-member-search');
+      renderOfficerMemberRows(qEl ? qEl.value : '');
+    })
+    .withFailureHandler(function() {
+      tbody.innerHTML = '<tr><td colspan="6" style="padding:24px;text-align:center;color:#999;">Failed to load members.</td></tr>';
+    })
+    .getMembers();
+}
+
+function filterOfficerMembers() {
+  var qEl = document.getElementById('off-member-search');
+  renderOfficerMemberRows(qEl ? qEl.value : '');
+}
+
+function renderOfficerMemberRows(q) {
+  var tbody = document.getElementById('off-member-tbody');
+  if (!tbody) return;
+  q = (q || '').toString().trim().toLowerCase();
+  _offFilteredList = _offMemberCache.filter(function(m) {
+    if (!q) return true;
+    return (String(m.fullName || '') + ' ' + String(m.username || '') + ' ' + String(m.phone || '')).toLowerCase().indexOf(q) > -1;
+  });
+  if (_offFilteredList.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="padding:24px;text-align:center;color:#999;">No members found.</td></tr>';
+    return;
+  }
+  var html = '';
+  _offFilteredList.forEach(function(m, idx) {
+    html += '<tr style="border-bottom:0.5px solid #F0EDE8;">'
+      + '<td style="padding:10px 14px;font-weight:600;">' + escHtml(m.fullName || '&mdash;') + '</td>'
+      + '<td style="padding:10px 14px;font-family:monospace;font-size:12px;">' + escHtml(m.username || '&mdash;') + '</td>'
+      + '<td style="padding:10px 14px;font-size:12px;">' + escHtml(m.phone || '&mdash;') + '</td>'
+      + '<td style="padding:10px 14px;font-size:12px;color:#666;">' + escHtml(m.memberType || '&mdash;') + '</td>'
+      + '<td style="padding:10px 14px;"><select id="off-role-' + idx + '" style="padding:6px 8px;border:1px solid #E0DDD6;border-radius:6px;font-size:12px;font-family:\'Plus Jakarta Sans\',sans-serif;background:#fff;outline:none;">'
+      + '<option value="regular">Regular</option>'
+      + '<option value="shortterm">Short Term</option>'
+      + '<option value="commodity">Commodity</option>'
+      + '<option value="treasurer">Treasurer</option>'
+      + '<option value="chairperson">Chairperson</option>'
+      + '</select></td>'
+      + '<td style="padding:10px 14px;text-align:center;"><button class="btn-primary" style="font-size:11px;padding:6px 12px;" onclick="assignOfficerFromMemberUI(' + idx + ')">Assign</button></td>'
+      + '</tr>';
+  });
+  tbody.innerHTML = html;
+}
+
+function assignOfficerFromMemberUI(idx) {
+  var m = _offFilteredList[idx];
+  if (!m) return;
+  var sel = document.getElementById('off-role-' + idx);
+  var role = sel ? sel.value : 'regular';
+  var err = document.getElementById('off-assign-err');
+  if (err) err.style.display = 'none';
+  var name = m.fullName || m.username;
+  if (!confirm('Assign ' + name + ' as the ' + role + ' officer?\n\nThey will receive an email notice in their Gmail and can log in as an officer using their member username (' + m.username + ') and password.\n\nOn first sign-in they will be required to set their own email and a new password.')) return;
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r && r.success) {
+        showToast('\u2713 ' + (r.message || 'Assigned!'));
+        loadCurrentOfficers();
+      } else if (err) {
+        err.textContent = (r && r.message) || 'Failed to assign.';
+        err.style.display = 'block';
+      }
+    })
+    .withFailureHandler(function(e) {
+      if (err) { err.textContent = 'Error: ' + e.message; err.style.display = 'block'; }
+    })
+    .assignOfficerFromMember({ memberId: m.username, role: role });
+}
+
+function removeAssignedOfficer(email) {
+  if (!confirm('Remove this officer assignment?\n\nThe member will no longer be able to log in as an officer.')) return;
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r && r.success) {
+        showToast('\u2713 Officer removed.');
+        loadCurrentOfficers();
+      } else {
+        showToast('\u274C Error: ' + (r && r.message || 'Failed'));
+      }
+    })
+    .withFailureHandler(function(e) { showToast('Error: ' + e.message); })
+    .deactivateOfficerAccount(email);
+}
+
+function transferChairperson() {
+  var err = document.getElementById('chair-transfer-err');
+  var ok = document.getElementById('chair-transfer-ok');
+  var btn = document.getElementById('chair-transfer-btn');
+  if (err) { err.style.display = 'none'; err.textContent = ''; }
+  if (ok) { ok.style.display = 'none'; ok.innerHTML = ''; }
+
+  var memberId = (document.getElementById('chair-new-memberId').value || '').trim();
+  var username = (document.getElementById('chair-new-username').value || '').trim();
+  var password = (document.getElementById('chair-new-password').value || '').trim();
+  var email = (document.getElementById('chair-new-email').value || '').trim().toLowerCase();
+
+  if (!memberId || !username || !password || !email) {
+    if (err) { err.textContent = 'All fields are required.'; err.style.display = 'block'; }
+    return;
+  }
+  if (email.indexOf('@') === -1) {
+    if (err) { err.textContent = 'Invalid email format.'; err.style.display = 'block'; }
+    return;
+  }
+  if (password.length < 8) {
+    if (err) { err.textContent = 'Password must be at least 8 characters.'; err.style.display = 'block'; }
+    return;
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Transferring...'; }
+
+  var adminName = '';
+  try { adminName = localStorage.getItem('campuscoop_admin_name') || localStorage.getItem('campuscoop_role') || ''; } catch(e) {}
+
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (btn) { btn.disabled = false; btn.textContent = '\uD83D\uDD12 Transfer Chairperson'; }
+      if (r && r.success) {
+        if (ok) {
+          ok.innerHTML = '\u2713 Chairperson transferred!<br>New credentials: <strong>' + username + '</strong> / <strong style="font-family:monospace;">' + password + '</strong>';
+          ok.style.display = 'block';
+        }
+        // Clear form
+        ['chair-new-memberId', 'chair-new-username', 'chair-new-password', 'chair-new-email'].forEach(function(id) {
+          var el = document.getElementById(id); if (el) el.value = '';
+        });
+        showToast('\u2713 ' + (r.message || 'Chairperson transferred successfully!'));
+        loadCurrentOfficers();
+      } else if (err) {
+        err.textContent = (r && r.message) || 'Failed to transfer chairperson.';
+        err.style.display = 'block';
+      }
+    })
+    .withFailureHandler(function(e) {
+      if (btn) { btn.disabled = false; btn.textContent = '\uD83D\uDD12 Transfer Chairperson'; }
+      if (err) { err.textContent = 'Error: ' + e.message; err.style.display = 'block'; }
+    })
+    .transferChairperson({ newMemberId: memberId, newUsername: username, newPassword: password, newEmail: email, adminName: adminName });
+}
+
+function saveAllOfficerCreds() {
+  var roles = ['regular', 'shortterm', 'commodity', 'treasurer', 'chairperson'];
+  var pending = roles.length;
+  var anyErr = false;
+  
+  roles.forEach(function(role) {
+    var u = (document.getElementById('off-' + role + '-user').value || '').trim();
+    var p = (document.getElementById('off-' + role + '-pass').value || '').trim();
+
+    if (!u || !p) {
+      showToast('Please fill in username and password for ' + role);
+      anyErr = true;
+      pending--;
+      return;
+    }
+
+    google.script.run
+      .withSuccessHandler(function(res) {
+        pending--;
+        if (pending <= 0 && !anyErr) {
+          var ok = document.getElementById('off-save-ok');
+          if (ok) { ok.style.display = 'inline'; setTimeout(function(){ ok.style.display='none'; }, 3000); }
+          showToast('\u2713 Legacy credentials saved!');
+        }
+      })
+      .withFailureHandler(function(e) {
+        pending--;
+        showToast('Error saving ' + role + ': ' + e.message);
+      })
+      .saveOfficerCredentials({ role: role, username: u, password: p });
+  });
+}
+
+/* ── Guide accordion toggle ── */
+function toggleGuide(el) {
+  var item = el.parentElement;
+  item.classList.toggle('open');
+}
+
+/* ── Suggestion Box ── */
+function sendSuggestion() {
+  var msg = (document.getElementById('suggest-msg').value || '').trim();
+  var topic = document.getElementById('suggest-topic').value;
+  var btn = document.getElementById('suggest-send-btn');
+  var chatbox = document.getElementById('chatbox');
+  if (!msg) { showToast('Please type a message first.'); return; }
+
+  // Show user message in chatbox
+  var userBubble = document.createElement('div');
+  userBubble.className = 'chat-msg chat-user';
+  userBubble.innerHTML = '<div class="chat-avatar">&#128100;</div>'
+    + '<div class="chat-bubble cb-user"><strong>' + topic + '</strong><br/>' + msg.replace(/</g, '&lt;') + '</div>';
+  chatbox.appendChild(userBubble);
+  chatbox.scrollTop = chatbox.scrollHeight;
+
+  // Clear input and disable button
+  document.getElementById('suggest-msg').value = '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
+
+  google.script.run
+    .withSuccessHandler(function(r) {
+      var reply = document.createElement('div');
+      reply.className = 'chat-msg chat-bot';
+      if (r && r.success) {
+        reply.innerHTML = '<div class="chat-avatar">&#129302;</div>'
+          + '<div class="chat-bubble cb-success">&#10003; Message sent! The developer will review your ' + topic.toLowerCase() + ' and may reach out if needed. Thank you for your feedback!</div>';
+      } else {
+        reply.innerHTML = '<div class="chat-avatar">&#129302;</div>'
+          + '<div class="chat-bubble cb-bot" style="border-color:#F7C1C1;background:#FFF5F5;color:#A32D2D;">Sorry, there was an error sending your message: ' + ((r && r.message) || 'Unknown error') + '. Please try again.</div>';
+      }
+      chatbox.appendChild(reply);
+      chatbox.scrollTop = chatbox.scrollHeight;
+      if (btn) { btn.disabled = false; btn.textContent = '✉ Send'; }
+    })
+    .withFailureHandler(function(e) {
+      var reply = document.createElement('div');
+      reply.className = 'chat-msg chat-bot';
+      reply.innerHTML = '<div class="chat-avatar">&#129302;</div>'
+        + '<div class="chat-bubble cb-bot" style="border-color:#F7C1C1;background:#FFF5F5;color:#A32D2D;">Error: ' + e.message + '</div>';
+      chatbox.appendChild(reply);
+      chatbox.scrollTop = chatbox.scrollHeight;
+      if (btn) { btn.disabled = false; btn.textContent = '✉ Send'; }
+    })
+    .sendSuggestionEmail({ topic: topic, message: msg });
+}
+
+/* ── CBU Percentage Settings ── */
+function updateCbuPreviews() {
+  var regEl = document.getElementById('cbu-reg-pct');
+  var stEl = document.getElementById('cbu-st-pct');
+  var comEl = document.getElementById('cbu-com-pct');
+  
+  var r = regEl ? (Number(regEl.value) || 300) : 300;
+  var s = stEl ? (Number(stEl.value) || 80) : 80;
+  var c = comEl ? (Number(comEl.value) || 80) : 80;
+  
+  var rp = document.getElementById('cbu-reg-prev');
+  var sp = document.getElementById('cbu-st-prev');
+  var cp = document.getElementById('cbu-com-prev');
+  if (rp) rp.textContent = '= ' + (r/100).toFixed(2).replace(/\.?0+$/,'') + '\u00D7 CBU';
+  if (sp) sp.textContent = '= ' + (s/100).toFixed(2).replace(/\.?0+$/,'') + '\u00D7 CBU';
+  if (cp) cp.textContent = '= ' + (c/100).toFixed(2).replace(/\.?0+$/,'') + '\u00D7 CBU';
+}
+
+function saveCbuSettings() {
+  var regEl = document.getElementById('cbu-reg-pct');
+  var stEl = document.getElementById('cbu-st-pct');
+  var comEl = document.getElementById('cbu-com-pct');
+  
+  if (!regEl || !stEl || !comEl) {
+    showToast('CBU input fields not found');
+    return;
+  }
+  
+  var r = Number(regEl.value);
+  var s = Number(stEl.value);
+  var c = Number(comEl.value);
+  if (!r || !s || !c || r < 1 || s < 1 || c < 1) {
+    showToast('Enter valid percentages (minimum 1).');
+    return;
+  }
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res && res.success) {
+        var ok = document.getElementById('cbu-save-ok');
+        if (ok) { ok.style.display = 'inline'; setTimeout(function(){ ok.style.display='none'; }, 3000); }
+        showToast('\u2713 CBU settings saved!');
+      } else {
+        showToast('\u274C Error: ' + (res && res.message || 'Failed'));
+      }
+    })
+    .withFailureHandler(function(e) { showToast('Error: ' + e.message); })
+    .saveCbuSettings({ regPct: r, stPct: s, comPct: c });
+}
+
+function loadCbuSettings() {
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!r || !r.success) return;
+      var er = document.getElementById('cbu-reg-pct');
+      var es = document.getElementById('cbu-st-pct');
+      var ec = document.getElementById('cbu-com-pct');
+      if (er) er.value = r.regPct || 300;
+      if (es) es.value = r.stPct  || 80;
+      if (ec) ec.value = r.comPct || 80;
+      updateCbuPreviews();
+      ['cbu-reg-pct','cbu-st-pct','cbu-com-pct'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('input', updateCbuPreviews);
+      });
+    })
+    .withFailureHandler(function(){})
+    .getCbuSettings();
+}
+
+/* ── Deduction Default Settings ── */
+function toggleDedPanel(type) {
+  var cb = document.getElementById('ded-' + type + '-on');
+  var panel = document.getElementById('ded-' + type + '-panel');
+  var dot = document.getElementById('ded-' + type + '-dot');
+  var isOn = cb && cb.checked;
+  // Move toggle dot
+  if (dot) dot.style.left = isOn ? '22px' : '2px';
+  // Grey out inputs when off
+  var inputs = panel ? panel.querySelectorAll('input[type=number]') : [];
+  for (var i = 0; i < inputs.length; i++) {
+    inputs[i].disabled = !isOn;
+    inputs[i].style.opacity = isOn ? '1' : '0.4';
+  }
+  if (panel) panel.style.opacity = isOn ? '1' : '0.5';
+}
+
+function saveDeductionDefaults() {
+  var data = {
+    regOn:        document.getElementById('ded-reg-on').checked,
+    stlOn:        document.getElementById('ded-stl-on').checked,
+    comOn:        document.getElementById('ded-com-on').checked,
+    regCbuRate:   Number(document.getElementById('ded-reg-cbu').value) || 2,
+    regService:   Number(document.getElementById('ded-reg-service').value) || 0,
+    regInsurancePct: Number(document.getElementById('ded-reg-insurance').value) || 0,
+    regNotarial:  Number(document.getElementById('ded-reg-notarial').value) || 0,
+    stlCbuRate:   Number(document.getElementById('ded-stl-cbu').value) || 1,
+    stlService:   Number(document.getElementById('ded-stl-service').value) || 0,
+    stlInsurancePct: Number(document.getElementById('ded-stl-insurance') ? document.getElementById('ded-stl-insurance').value : 0) || 0,
+    comCbuRate:   Number(document.getElementById('ded-com-cbu').value) || 1,
+    comService:   Number(document.getElementById('ded-com-service').value) || 0
+  };
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r && r.success) {
+        var ok = document.getElementById('ded-save-ok');
+        if (ok) { ok.style.display = 'inline'; setTimeout(function(){ ok.style.display='none'; }, 3000); }
+        showToast('\u2713 Deduction settings saved!');
+      } else {
+        showToast('\u274C Error: ' + (r && r.message || 'Failed'));
+      }
+    })
+    .withFailureHandler(function(e) { showToast('Error: ' + e.message); })
+    .saveDeductionSettings(data);
+}
+
+function loadDeductionDefaults() {
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!r || !r.success) return;
+      var el = function(id) { return document.getElementById(id); };
+      if (el('ded-reg-cbu'))       el('ded-reg-cbu').value       = r.regCbuRate || 2;
+      if (el('ded-reg-service'))   el('ded-reg-service').value   = r.regService || 0;
+      if (el('ded-reg-insurance')) el('ded-reg-insurance').value = r.regInsurancePct !== undefined ? r.regInsurancePct : 1.62;
+      if (el('ded-reg-notarial'))  el('ded-reg-notarial').value  = r.regNotarial || 0;
+      if (el('ded-stl-cbu'))       el('ded-stl-cbu').value       = r.stlCbuRate || 1;
+      if (el('ded-stl-service'))   el('ded-stl-service').value   = r.stlService || 0;
+      if (el('ded-stl-insurance')) el('ded-stl-insurance').value = r.stlInsurancePct !== undefined ? r.stlInsurancePct : 1.62;
+      if (el('ded-com-cbu'))       el('ded-com-cbu').value       = r.comCbuRate || 1;
+      if (el('ded-com-service'))   el('ded-com-service').value   = r.comService || 0;
+      // Apply toggle state
+      if (el('ded-reg-on')) { el('ded-reg-on').checked = r.regOn !== false; toggleDedPanel('reg'); }
+      if (el('ded-stl-on')) { el('ded-stl-on').checked = r.stlOn !== false; toggleDedPanel('stl'); }
+      if (el('ded-com-on')) { el('ded-com-on').checked = r.comOn !== false; toggleDedPanel('com'); }
+    })
+    .withFailureHandler(function(){})
+    .getDeductionSettings();
+}
+/* ── Deductions Page Logic (Admin SPA) ── */
+function _scopeDeductionsToRole() {
+  var role = 'admin';
+  try { role = localStorage.getItem('campuscoop_role') || 'admin'; } catch(e) {}
+  var map = { regular: 'reg', shortterm: 'stl', commodity: 'com' };
+  var own = map[role];
+  if (!own) return; // admin / masteradmin / treasurer / chairperson keep full view
+
+  // Officers edit their own loan type panel only
+  var panels = document.querySelectorAll('#page-deductions [data-role]');
+  panels.forEach(function(p) {
+    p.style.display = p.getAttribute('data-role') === own ? '' : 'none';
+  });
+
+  // CBU loan-limit settings stay with the master admin
+  var cbuCard = document.getElementById('ded-cbu-card');
+  if (cbuCard) cbuCard.style.display = 'none';
+
+  var topSub = document.querySelector('#page-deductions .topbar-sub');
+  var labels = { reg: 'Regular', stl: 'Short Term', com: 'Commodity' };
+  if (topSub) topSub.textContent = 'Manage deduction settings and fees for ' + labels[own] + ' loans';
+}
+
+function initDeductionsPage() {
+  _scopeDeductionsToRole();
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!r || !r.success) return;
+      var el = function(id) { return document.getElementById(id); };
+      
+      // Load CBU Pct
+      if (el('ded-cbu-reg-pct')) el('ded-cbu-reg-pct').value = r.regCbuPct || 300;
+      if (el('ded-cbu-st-pct'))  el('ded-cbu-st-pct').value  = r.stCbuPct  || 80;
+      if (el('ded-cbu-com-pct')) el('ded-cbu-com-pct').value = r.comCbuPct || 80;
+
+      // Load Deductions Defaults
+      if (el('pded-reg-cbu'))       el('pded-reg-cbu').value       = r.regCbuRate || 2;
+      if (el('pded-reg-service'))   el('pded-reg-service').value   = r.regService || 0;
+      if (el('pded-reg-insurance')) el('pded-reg-insurance').value = r.regInsurancePct !== undefined ? r.regInsurancePct : 1.62;
+      if (el('pded-reg-notarial'))  el('pded-reg-notarial').value  = r.regNotarial || 0;
+      if (el('pded-stl-cbu'))       el('pded-stl-cbu').value       = r.stlCbuRate || 1;
+      if (el('pded-stl-service'))   el('pded-stl-service').value   = r.stlService || 0;
+      if (el('pded-stl-insurance')) el('pded-stl-insurance').value = r.stlInsurancePct !== undefined ? r.stlInsurancePct : 1.62;
+      if (el('pded-com-cbu'))       el('pded-com-cbu').value       = r.comCbuRate || 1;
+      if (el('pded-com-service'))   el('pded-com-service').value = r.comService || 0;
+      
+      // Toggle states
+      if (el('pded-reg-on')) { el('pded-reg-on').checked = r.regOn !== false; togglePageDedPanel('reg'); }
+      if (el('pded-stl-on')) { el('pded-stl-on').checked = r.stlOn !== false; togglePageDedPanel('stl'); }
+      if (el('pded-com-on')) { el('pded-com-on').checked = r.comOn !== false; togglePageDedPanel('com'); }
+    })
+    .withFailureHandler(function(){})
+    .getDeductionSettings();
+}
+
+function togglePageDedPanel(type) {
+  var cb = document.getElementById('pded-' + type + '-on');
+  var panel = document.getElementById('pded-' + type + '-panel');
+  var isOn = cb && cb.checked;
+  var inputs = panel ? panel.querySelectorAll('input') : [];
+  for (var i = 0; i < inputs.length; i++) {
+    inputs[i].disabled = !isOn;
+    inputs[i].style.opacity = isOn ? '1' : '0.4';
+  }
+  if (panel) panel.style.opacity = isOn ? '1' : '0.6';
+}
+
+function saveDeductionPageCbu() {
+  var btn = document.querySelector('#page-deductions .btn-primary'); // First btn
+  var r = Number(document.getElementById('ded-cbu-reg-pct').value);
+  var s = Number(document.getElementById('ded-cbu-st-pct').value);
+  var c = Number(document.getElementById('ded-cbu-com-pct').value);
+  
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+  
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Save CBU Settings'; }
+      if (res && res.success) {
+        var ok = document.getElementById('ded-save-cbu-ok');
+        if (ok) { ok.style.display = 'inline'; setTimeout(function(){ ok.style.display='none'; }, 3000); }
+        showToast('CBU settings updated!');
+      } else {
+        showToast('Error: ' + (res && res.message || 'Failed'));
+      }
+    })
+    .withFailureHandler(function(e) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Save CBU Settings'; }
+      showToast('Error: ' + e.message);
+    })
+    .saveCbuSettings({ regPct: r, stPct: s, comPct: c });
+}
+
+function savePageDeductionDefaults() {
+  var btn = document.querySelectorAll('#page-deductions .btn-primary')[1]; // Second btn
+  var data = {
+    regOn:        document.getElementById('pded-reg-on').checked,
+    stlOn:        document.getElementById('pded-stl-on').checked,
+    comOn:        document.getElementById('pded-com-on').checked,
+    regCbuRate:   Number(document.getElementById('pded-reg-cbu').value) || 0,
+    regService:   Number(document.getElementById('pded-reg-service').value) || 0,
+    regInsurancePct: Number(document.getElementById('pded-reg-insurance').value) || 0,
+    regNotarial:  Number(document.getElementById('pded-reg-notarial').value) || 0,
+    stlCbuRate:   Number(document.getElementById('pded-stl-cbu').value) || 0,
+    stlService:   Number(document.getElementById('pded-stl-service').value) || 0,
+    stlInsurancePct: Number(document.getElementById('pded-stl-insurance').value) || 0,
+    comCbuRate:   Number(document.getElementById('pded-com-cbu').value) || 0,
+    comService:   Number(document.getElementById('pded-com-service').value) || 0
+  };
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Save Deduction Settings'; }
+      if (r && r.success) {
+        var ok = document.getElementById('pded-save-ok');
+        if (ok) { ok.style.display = 'inline'; setTimeout(function(){ ok.style.display='none'; }, 3000); }
+        showToast('Deduction defaults updated!');
+      } else {
+        showToast('Error: ' + (r && r.message || 'Failed'));
+      }
+    })
+    .withFailureHandler(function(e) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Save Deduction Settings'; }
+      showToast('Error: ' + e.message);
+    })
+    .saveDeductionSettings(data);
+}
+</script>

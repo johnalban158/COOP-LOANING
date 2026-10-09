@@ -1,0 +1,131 @@
+<script>
+var _eyeOpen = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+var _eyeClosed = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
+function togglePW(inputId, icon) {
+  var el = document.getElementById(inputId);
+  if (!el) return;
+  if (el.type === 'password') {
+    el.type = 'text';
+    icon.innerHTML = _eyeClosed;
+  } else {
+    el.type = 'password';
+    icon.innerHTML = _eyeOpen;
+  }
+}
+
+var pendingOfficer = null;
+
+(function() {
+  try {
+    var raw = sessionStorage.getItem('campuscoop_pending_officer');
+    if (raw) pendingOfficer = JSON.parse(raw);
+  } catch(e) {}
+
+  if (!pendingOfficer || !pendingOfficer.user) {
+    var base = document.querySelector('base');
+    window.top.location.href = (base ? base.href : '') + '?page=login';
+    return;
+  }
+
+  var userInput = document.getElementById('oc-user');
+  if (userInput) userInput.value = pendingOfficer.user;
+})();
+
+function ocShowError(msg) {
+  var err = document.getElementById('oc-err');
+  if (err) {
+    err.textContent = msg;
+    err.style.display = 'block';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+}
+
+function skipOfficerChange() {
+  if (!pendingOfficer || !pendingOfficer.user) {
+    var base = document.querySelector('base');
+    window.top.location.href = (base ? base.href : '') + '?page=login';
+    return;
+  }
+  try { sessionStorage.removeItem('campuscoop_pending_officer'); } catch(e) {}
+  try {
+    localStorage.setItem('campuscoop_role', pendingOfficer.role || '');
+    localStorage.setItem('campuscoop_admin_name', pendingOfficer.name || pendingOfficer.user);
+  } catch(e) {}
+  var base = document.querySelector('base');
+  window.top.location.href = (base ? base.href : '') + '?page=dashboard';
+}
+
+function submitOfficerChange() {
+  var err   = document.getElementById('oc-err');
+  var ok    = document.getElementById('oc-ok');
+  var btn   = document.getElementById('oc-btn');
+  if (err) err.style.display = 'none';
+  if (ok)  ok.style.display = 'none';
+
+  if (!pendingOfficer || !pendingOfficer.user) {
+    ocShowError('Session expired. Please log in again.');
+    return;
+  }
+
+  var currentPassword = document.getElementById('oc-current').value;
+  var newEmail        = document.getElementById('oc-email').value.trim();
+  var newPassword     = document.getElementById('oc-newpw').value;
+  var confirmPassword = document.getElementById('oc-confirm').value;
+
+  if (!currentPassword || !newEmail || !newPassword || !confirmPassword) {
+    ocShowError('Please fill in all fields.');
+    return;
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+    ocShowError('Please enter a valid email address.');
+    return;
+  }
+  if (newPassword.length < 8) {
+    ocShowError('New password must be at least 8 characters long.');
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    ocShowError('Confirm password does not match.');
+    return;
+  }
+  if (newPassword === currentPassword) {
+    ocShowError('New password must be different from your current password.');
+    return;
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r && r.success) {
+        try { sessionStorage.removeItem('campuscoop_pending_officer'); } catch(e) {}
+        try {
+          localStorage.setItem('campuscoop_role', pendingOfficer.role || '');
+          localStorage.setItem('campuscoop_admin_name', r.fullname || pendingOfficer.name || pendingOfficer.user);
+        } catch(e) {}
+        if (ok) {
+          ok.textContent = '\u2714 Account secured! Redirecting to your dashboard...';
+          ok.style.display = 'block';
+        }
+        setTimeout(function() {
+          var base = document.querySelector('base');
+          window.top.location.href = (base ? base.href : '') + '?page=dashboard';
+        }, 1200);
+      } else {
+        ocShowError((r && r.message) || 'Failed to update credentials. Please try again.');
+        if (btn) { btn.disabled = false; btn.textContent = 'Save & Continue to Dashboard'; }
+      }
+    })
+    .withFailureHandler(function(e) {
+      ocShowError('Connection Error: ' + e.message);
+      if (btn) { btn.disabled = false; btn.textContent = 'Save & Continue to Dashboard'; }
+    })
+    .changeOfficerCredentials({
+      identifier: pendingOfficer.user,
+      currentPassword: currentPassword,
+      newEmail: newEmail,
+      newPassword: newPassword
+    });
+}
+</script>

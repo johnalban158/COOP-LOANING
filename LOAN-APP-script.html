@@ -1,0 +1,847 @@
+<script>
+/* ── Loan Applications — Admin Side ──── */
+var APPS = [];
+var DED_DEFAULTS = {};
+
+function loadApplications() {
+  var tbody = document.getElementById('app-table');
+  if (tbody) {
+    tbody.innerHTML = '<tr><td colspan="8">'
+      + '<div style="text-align:center;padding:30px;color:#888;">'
+      + 'Loading applications...</div></td></tr>';
+  }
+  google.script.run
+    .withSuccessHandler(function(r) {
+      console.log('Backend response:', JSON.stringify(r));
+      if (r && r.success) {
+        APPS = r.apps || [];
+        DED_DEFAULTS = r.dedDefaults || {};
+        renderAppTable(APPS);
+      } else {
+        if (tbody) {
+          var errorMsg = r && r.message ? r.message : 'Unknown error occurred';
+          console.log('Error loading applications:', errorMsg);
+          tbody.innerHTML = '<tr><td colspan="8">'
+            + '<div class="empty-state">'
+            + '<div class="empty-icon">&#9888;</div>'
+            + '<div class="empty-title">Cannot load applications</div>'
+            + '<div class="empty-sub">' + errorMsg + '</div></div></td></tr>';
+        }
+      }
+    })
+    .withFailureHandler(function(e) {
+      console.log('Backend failure:', e);
+      if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="8">'
+          + '<div class="empty-state">'
+          + '<div class="empty-icon">&#9888;</div>'
+          + '<div class="empty-title">Connection Error</div>'
+          + '<div class="empty-sub">Failed to connect to server: ' + (e.message || 'Unknown error')
+          + '</div></div></td></tr>';
+      }
+    })
+    .getApplications();
+}
+
+function renderAppTable(apps) {
+  var tbody = document.getElementById('app-table');
+  if (!tbody) return;
+
+  var role = localStorage.getItem('campuscoop_role') || 'admin';
+  
+  // Filter apps by role
+  var filteredApps = apps;
+  if (role !== 'admin') {
+    filteredApps = apps.filter(function(a) {
+      var memberType = (a.memberId && a.memberId.indexOf('TCH') === 0) ? 'Teacher' : 'JO';
+      var loanType = a.loanType;
+      
+      if (role === 'regular') {
+        // Regular Officer can handle Regular loans OR any loan for Teachers
+        return loanType === 'Regular' || memberType === 'Teacher';
+      } else if (role === 'shortterm' || role === 'commodity') {
+        // Short Term / Commodity handles Short Term / Commodity for Job Orders
+        return (loanType === 'Short Term' || loanType === 'Commodity') && memberType === 'JO';
+      }
+      return true;
+    });
+  }
+
+  // Update stat cards based on FILTERED apps
+  var pending  = 0, approved = 0, rejected = 0;
+  filteredApps.forEach(function(a) {
+    var s = (a.status || '').toLowerCase();
+    if (s === 'pending')  pending++;
+    else if (s === 'approved' || s.indexOf('approved') !== -1) approved++; // Handle "Approved (In Settlement)"
+    else if (s === 'rejected') rejected++;
+  });
+  // Use :not(#dash-cbu-card) to skip the hidden CBU card duplicated in the SPA layout
+  var scope = document.getElementById('page-applications');
+  var cards = scope
+    ? scope.querySelectorAll('.cards-row .card:not(#dash-cbu-card) .card-val')
+    : document.querySelectorAll('.cards-row .card:not(#dash-cbu-card) .card-val');
+  if (cards.length >= 4) {
+    cards[0].textContent = pending;
+    cards[1].textContent = approved;
+    cards[2].textContent = rejected;
+    cards[3].textContent = filteredApps.length;
+  }
+  // Sanity check: counting should equal total
+  var counted = pending + approved + rejected;
+  if (counted > filteredApps.length) {
+    console.error('Status count sanity check FAILED: pending=' + pending + ' + approved=' + approved + ' + rejected=' + rejected + ' = ' + counted + ' > total=' + filteredApps.length);
+  }
+
+  if (filteredApps.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8">'
+      + '<div class="empty-state">'
+      + '<div class="empty-icon">&#128203;</div>'
+      + '<div class="empty-title">No applications for your section</div>'
+      + '<div class="empty-sub">Filtered based on your officer role (' + role + ').</div>'
+      + '</div></td></tr>';
+    return;
+  }
+
+  // Store the filtered apps for viewApp to use
+  window._filteredApps = filteredApps;
+  
+  var html = '';
+  filteredApps.forEach(function(a, i) {
+    var statusClass = 'p-pending';
+    var buttonText = a.status || 'Pending';
+    var s = (a.status || '').toLowerCase();
+    if (s === 'approved' || s.indexOf('approved') !== -1) {
+      statusClass = 'p-approved';
+      buttonText = s.indexOf('settlement') !== -1 ? 'In Settlement' : 'Approved';
+    }
+    if (s === 'rejected') statusClass = 'p-rejected';
+
+    var typePill = a.loanType === 'Regular'
+      ? '<span class="pill p-reg">Regular</span>'
+      : a.loanType === 'Commodity'
+        ? '<span class="pill p-stl">Commodity</span>'
+        : '<span class="pill p-stl">Short Term</span>';
+
+    html += '<tr onclick="viewApp(' + i + ')"'
+      + ' style="cursor:pointer;">';
+    html += '<td><input type="checkbox" class="app-checkbox" data-index="' + i + '" onclick="event.stopPropagation()"></td>';
+    html += '<td>' + a.lastName + ', '
+      + a.firstName + '<br><span class="mono"'
+      + ' style="font-size:11px;color:#888;">'
+      + a.memberId + '</span></td>';
+    html += '<td>' + typePill + '</td>';
+    html += '<td>' + a.loanType + '</td>';
+    html += '<td class="mono">' + fmt(a.amount)
+      + '</td>';
+    html += '<td>' + a.term + ' mo</td>';
+    html += '<td>' + a.dateSubmitted + '</td>';
+    html += '<td><span class="pill '
+      + statusClass + '">' + buttonText
+      + '</span></td>';
+    html += '<td>';
+    if (s === 'pending') {
+      html += '<button class="action-btn approve"'
+        + ' onclick="event.stopPropagation();approveApp(' + i + ')">'
+        + '&#10003; Approve</button>';
+      html += '<button class="action-btn reject"'
+        + ' onclick="event.stopPropagation();rejectApp(' + i + ')">'
+        + '&#10005; Reject</button>';
+    } else if (s.indexOf('approved') !== -1 && s.indexOf('settlement') !== -1) {
+      // Show Release button for "Approved (In Settlement)" status
+      html += '<button class="action-btn release"'
+        + ' onclick="event.stopPropagation();releaseLoan(' + i + ')">'
+        + '&#128666; Release</button>';
+    } else {
+      html += '<span style="color:#aaa;font-size:12px;">' + buttonText + '</span>';
+    }
+    html += '</td></tr>';
+  });
+  tbody.innerHTML = html;
+}
+
+var fmt = function(n) {
+  return '\u20B1' + (Number(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
+function viewApp(idx) {
+  var a = APPS[idx];
+  if (!a) return;
+
+  var title = document.getElementById('modal-title');
+  var sub = document.getElementById('modal-sub');
+  if (!title || !sub) {
+    title = document.querySelector(
+      '#app-modal .modal-title');
+  }
+  if (title) title.textContent =
+    'Application \u2014 ' + a.memberId;
+  if (sub) sub.innerHTML =
+    'Filed ' + a.dateSubmitted;
+
+  var typePillClass = a.loanType === 'Regular'
+    ? 'p-reg' : a.loanType === 'Commodity'
+    ? 'p-com' : 'p-stl';
+  var typePill = '<span class="pill '
+    + typePillClass + '">'
+    + a.loanType + '</span>';
+
+  var html = '';
+  html += '<div class="md-section sec-applicant">'
+    + 'Applicant Info</div>';
+  html += row('Applicant Name',
+    a.lastName + ', ' + a.firstName);
+  html += row('Member ID',
+    '<span class="mono">' + a.memberId
+    + '</span>');
+    
+  // ── CBU Info ──
+  var cap = a.memberCapital || 0;
+  var mType = a.memberType || 'JO';
+  var lType = a.loanType || '';
+  // Simple logic to show what the max is (mirrors submitLoanApplication logic)
+  var rate = (lType === 'Regular') ? 300 : ((mType === 'Teacher') ? 300 : 80);
+  var max = Math.round(cap * rate / 100);
+  
+  html += row('Capital (CBU)', 
+    '<span style="font-weight:700;color:#185FA5;">' + fmt(cap) + '</span>');
+  html += row('Max Loanable', 
+    '<span style="font-weight:700;color:#3B6D11;">' + fmt(max) + '</span> <span style="font-size:10px;color:#666;">(' + rate + '% of CBU)</span>');
+
+  html += '<div class="md-section sec-loan">'
+    + 'Loan Details</div>';
+  html += row('Loan type', typePill);
+  html += row('Amount requested',
+    '<span class="mono">' + fmt(a.amount)
+    + '</span>');
+  html += row('Term',
+    a.term + ' months');
+  html += row('Date filed', a.dateSubmitted);
+  html += row('Status',
+    '<span class="pill p-'
+    + a.status.toLowerCase() + '">'
+    + a.status + '</span>');
+
+  if (a.status === 'Approved'
+    && a.dateApproved) {
+    html += row('Approved on', a.dateApproved);
+  }
+  if (a.status === 'Rejected' && a.reason) {
+    html += row('Reason', a.reason);
+  }
+
+  /* ── PAYMENT ESTIMATE ── */
+  html += '<div class="md-section sec-estimate">'
+    + 'Payment Estimate</div>';
+  html += '<div class="md-est">';
+  html += '<div class="md-est-title">'
+    + 'Monthly Breakdown</div>';
+
+  if (a.loanType === 'Regular') {
+    var prin = a.amount / a.term;
+    var int1 = a.amount * 0.01;
+    html += estRow('Monthly principal',
+      fmt(prin));
+    html += estRow('1st month interest',
+      fmt(int1));
+    html += '<div class="md-est-total">'
+      + '<span>1st month payment</span>'
+      + '<span>' + fmt(prin + int1)
+      + '</span></div>';
+    html += '<div class="md-est-note">'
+      + '\u2193 Interest decreases monthly '
+      + 'as balance goes down</div>';
+  } else if (a.loanType === 'Commodity') {
+    var comTotalInt = Math.round(
+      a.amount * 0.01 * a.term);
+    var comTotal = a.amount + comTotalInt;
+    var comMonthly = Math.round(
+      comTotal / a.term);
+    html += estRow('Monthly payment',
+      fmt(comMonthly));
+    html += estRow('Total interest ('
+      + a.term + '% = 1%/mo \u00D7 '
+      + a.term + ')',
+      fmt(comTotalInt));
+    html += '<div class="md-est-total">'
+      + '<span>Total to pay</span>'
+      + '<span>' + fmt(comTotal)
+      + '</span></div>';
+  } else {
+    var total = a.amount * 1.06;
+    var monthly = total / a.term;
+    html += estRow('Monthly payment',
+      fmt(monthly));
+    html += estRow('Total interest (6%)',
+      fmt(a.amount * 0.06));
+    html += '<div class="md-est-total">'
+      + '<span>Total to pay</span>'
+      + '<span>' + fmt(total)
+      + '</span></div>';
+  }
+  html += '</div>';
+
+  var s = (a.status || '').toLowerCase();
+
+  /* ── DEDUCTIONS & CERTIFICATION (For Pending or Approval Stage) ── */
+  if (s === 'pending' || s === 'approved') {
+    var amt = a.amount;
+    var ltype = (a.loanType || '').toLowerCase();
+    
+    // CBU rate comes from that loan type's own saved deduction defaults
+    var dedOn = (ltype === 'regular')    ? DED_DEFAULTS.regOn !== false
+              : (ltype === 'short term') ? DED_DEFAULTS.stlOn !== false
+                                         : DED_DEFAULTS.comOn !== false;
+    var cbuPct = (ltype === 'regular')    ? (DED_DEFAULTS.regCbuRate || 2)
+              : (ltype === 'short term') ? (DED_DEFAULTS.stlCbuRate || 1)
+                                         : (DED_DEFAULTS.comCbuRate || 1);
+    if (!dedOn) cbuPct = 0;
+    var cbuRate = cbuPct / 100;
+    var cbuLabel = 'Capital Build-up (' + cbuPct + '%)';
+    var cbu = Math.round(amt * cbuRate);
+
+    var totalPastDues = a.totalPastDues || 0;
+    var existingBal = a.existingBalance || 0;
+
+    // Pre-fill fees from admin defaults (scoped to this loan type only)
+    // Insurance is a percentage of the loan amount (e.g. 1.62% of ₱40,000)
+    var defService = 0, defInsurance = 0, defNotarial = 0;
+    if (ltype === 'regular') {
+      defService   = dedOn ? (DED_DEFAULTS.regService   || 0) : 0;
+      defNotarial  = dedOn ? (DED_DEFAULTS.regNotarial  || 0) : 0;
+      var regInsPct = dedOn ? (DED_DEFAULTS.regInsurancePct !== undefined ? DED_DEFAULTS.regInsurancePct : (DED_DEFAULTS.regInsurance || 0)) : 0;
+      defInsurance = amt * regInsPct / 100;
+    } else if (ltype === 'short term') {
+      defService = dedOn ? (DED_DEFAULTS.stlService || 0) : 0;
+      var stlInsPct = dedOn ? (DED_DEFAULTS.stlInsurancePct !== undefined ? DED_DEFAULTS.stlInsurancePct : (DED_DEFAULTS.stlInsurance || 0)) : 0;
+      defInsurance = amt * stlInsPct / 100;
+    } else {
+      defService = dedOn ? (DED_DEFAULTS.comService || 0) : 0;
+    }
+
+    // For Regular: existing reg balance is in deductions (C), not past dues
+    // For STL/Commodity: existing reg balance is in past dues (B)
+    var defaultTotalC, defaultTotalB, defaultNet;
+    if (ltype === 'regular') {
+      defaultTotalC = cbu + existingBal; // existingBal = renewing reg loan
+      defaultTotalB = 0;
+    } else {
+      defaultTotalC = cbu;
+      defaultTotalB = existingBal; // existing reg loan is a past due
+    }
+    var otherDeductions = a.otherDeductions || (s === 'pending' ? defaultTotalC : 0);
+    var netProceeds = a.netProceeds || (s === 'pending' ? amt - (defaultTotalB + defaultTotalC) : 0);
+
+    html += '<div class="deductions-card">';
+    html += '<div class="deductions-header"><span>III.</span> CERTIFICATION PAST DUES / BALANCE</div>';
+    html += '<div style="padding:10px 16px;background:#F8F7F5;font-size:13px;color:#444;">Amount Applied <strong>(A)</strong>: <span style="font-weight:700;font-size:15px;color:#000;">' + fmt(amt) + '</span></div>';
+    html += '<div class="deductions-grid">';
+
+    // ── Column 1: Past Dues (B) ──
+    html += '<div class="deductions-col">';
+    html += '<span class="ded-section-title">PAST DUES (B)</span>';
+    if (s === 'approved') {
+      html += '<div style="padding:10px 0; color:#444; font-size:14px;">Total Past Dues: <span style="font-weight:700;">₱' + (Number(totalPastDues) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '</span></div>';
+    } else if (ltype === 'regular') {
+      // Regular: past dues from STL, Commodity, Canteen, Ticket, Others
+      html += dedInput('Short Term Loan', 'past-st', 0, idx);
+      html += dedInput('Commodity', 'past-com', 0, idx);
+      html += dedInput('Canteen Credit', 'past-canteen', 0, idx);
+      html += dedInput('Ticket/Load', 'past-ticket', 0, idx);
+      html += dedInput('Others', 'past-others', 0, idx);
+    } else if (ltype === 'short term') {
+      // STL: past dues from Regular, Commodity, Others
+      html += dedInput('Regular Loan (existing bal)', 'past-reg', existingBal, idx);
+      html += dedInput('Commodity', 'past-com', 0, idx);
+      html += dedInput('Others', 'past-others', 0, idx);
+    } else {
+      // Commodity: past dues from Regular, STL, Others
+      html += dedInput('Regular Loan (existing bal)', 'past-reg', existingBal, idx);
+      html += dedInput('Short Term Loan', 'past-st', 0, idx);
+      html += dedInput('Others', 'past-others', 0, idx);
+    }
+    if (s === 'pending') {
+      html += '<div class="ded-total-row"><span>TOTAL (B)</span><span class="ded-total-val" id="total-b-' + idx + '">₱' + (Number(defaultTotalB) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '</span></div>';
+    }
+    html += '</div>';
+
+    // ── Column 2: Deductions (C) ──
+    html += '<div class="deductions-col">';
+    html += '<span class="ded-section-title">DEDUCTIONS (C)</span>';
+    if (s === 'approved') {
+      html += '<div style="padding:10px 0; color:#444; font-size:14px;">Total Deductions: <span style="font-weight:700;">₱' + (Number(otherDeductions) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '</span></div>';
+    } else if (ltype === 'regular') {
+      // Regular: deductions include existing reg loan balance (renewal), CBU 2%, fees
+      html += dedInput('Regular Loan (existing bal)', 'ded-reg', existingBal, idx);
+      html += dedInput(cbuLabel, 'ded-cbu', cbu, idx);
+      html += dedInput('Service Fee', 'ded-service', defService, idx);
+      html += dedInput('Insurance', 'ded-insurance', defInsurance, idx);
+      html += dedInput('Notarial Fee', 'ded-notarial', defNotarial, idx);
+    } else if (ltype === 'short term') {
+      // STL: CBU + Service Fee + Insurance (insurance = % of loan amount)
+      html += dedInput(cbuLabel, 'ded-cbu', cbu, idx);
+      html += dedInput('Service Fee', 'ded-service', defService, idx);
+      html += dedInput('Insurance', 'ded-insurance', defInsurance, idx);
+    } else {
+      // Commodity: just CBU + Service Fee
+      html += dedInput(cbuLabel, 'ded-cbu', cbu, idx);
+      html += dedInput('Service Fee', 'ded-service', defService, idx);
+    }
+    if (s === 'pending') {
+      html += '<div class="ded-total-row"><span>TOTAL (C)</span><span class="ded-total-val" id="total-c-' + idx + '">₱' + (Number(defaultTotalC) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '</span></div>';
+    }
+    html += '</div>';
+    html += '</div>'; // end grid
+
+    // Net Proceeds
+    html += '<div class="net-proceeds-area">';
+    html += '<span class="net-lbl">NET PROCEEDS (A - (B+C))</span>';
+    html += '<span class="net-val" id="net-proceeds-' + idx + '">₱' + netProceeds.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '</span>';
+    html += '</div>';
+    html += '</div>';
+  }
+
+
+  /* ── ACTIONS ── */
+  var s = (a.status || '').toLowerCase();
+  html += '<div class="modal-actions" style="flex-direction:column;align-items:stretch;gap:10px;">';
+  if (s === 'pending') {
+    // Deduction acknowledgment checkbox — must be checked before approving
+    html += '<label id="ded-ack-lbl-' + idx + '" style="display:flex;align-items:center;gap:8px;'
+      + 'background:#FFFBE6;border:1px solid #F5C842;border-radius:8px;padding:10px 14px;'
+      + 'font-size:12px;font-weight:600;color:#7A5500;cursor:pointer;user-select:none;">'
+      + '<input type="checkbox" id="ded-ack-' + idx + '" onchange="onDedAckChange(' + idx + ')" '
+      + 'style="width:16px;height:16px;cursor:pointer;accent-color:#C8860A;">'
+      + '&#9989; I have verified all deductions and net proceeds before approving this loan.'
+      + '</label>';
+    html += '<div style="display:flex;gap:8px;justify-content:flex-end;">';
+    html += '<button class="btn-close-modal"'
+      + ' onclick="closeModal(\'app-modal\')">'
+      + 'Close</button>';
+    html += '<button class="btn-reject"'
+      + ' onclick="rejectApp(' + idx
+      + ')">&#10005; Reject</button>';
+    html += '<button class="btn-approve" id="approve-btn-' + idx + '"'
+      + ' disabled style="opacity:0.45;cursor:not-allowed;"'
+      + ' onclick="approveApp(' + idx
+      + ')">&#10003; Approve</button>';
+    html += '</div>';
+  } else {
+    html += '<div style="display:flex;gap:8px;justify-content:flex-end;">';
+    html += '<button class="btn-close-modal"'
+      + ' onclick="closeModal(\'app-modal\')">'
+      + 'Close</button>';
+    if (s === 'approved') {
+      html += '<button class="btn-approve" style="background:#0D47A1;"'
+        + ' onclick="showClaimingForm(' + idx
+        + ')">&#128197; Send Claiming Schedule</button>';
+    }
+    html += '</div>';
+  }
+  html += '</div>'; // end modal-actions
+
+  /* ── CLAIMING SCHEDULE FORM (hidden until toggled) ── */
+  if (s === 'approved') {
+    html += '<div id="claiming-form-' + idx + '" style="display:none;margin-top:14px;background:#F0F7FF;border:1px solid #90CAF9;border-radius:10px;padding:18px 20px;">'
+      + '<div style="font-size:13px;font-weight:600;color:#0D47A1;margin-bottom:12px;">&#128197; Schedule Loan Claiming</div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">'
+      + '<div><label style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;display:block;margin-bottom:4px;">Date</label>'
+      + '<input type="date" id="claim-date-' + idx + '" style="width:100%;padding:8px 10px;border:0.5px solid #ccc;border-radius:6px;font-size:13px;font-family:Montserrat,sans-serif;box-sizing:border-box;" /></div>'
+      + '<div><label style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;display:block;margin-bottom:4px;">Time</label>'
+      + '<input type="text" id="claim-time-' + idx + '" value="8:00 AM - 5:00 PM" style="width:100%;padding:8px 10px;border:0.5px solid #ccc;border-radius:6px;font-size:13px;font-family:Montserrat,sans-serif;box-sizing:border-box;" /></div>'
+      + '</div>'
+      + '<div style="margin-bottom:12px;"><label style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;display:block;margin-bottom:4px;">Location</label>'
+      + '<input type="text" id="claim-loc-' + idx + '" value="CampusCoop Office, SKSU" style="width:100%;padding:8px 10px;border:0.5px solid #ccc;border-radius:6px;font-size:13px;font-family:Montserrat,sans-serif;box-sizing:border-box;" /></div>'
+      + '<button onclick="sendClaimingSched(' + idx + ')" style="padding:9px 22px;background:#0D47A1;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;font-family:Montserrat,sans-serif;">&#128241; Send Email to Member</button>'
+      + '<span id="claim-msg-' + idx + '" style="margin-left:10px;font-size:12px;color:#3B6D11;display:none;">&#10003; Sent!</span>'
+      + '</div>';
+  }
+
+  var body = document.getElementById(
+    'modal-body');
+  if (body) body.innerHTML = html;
+  var modal = document.getElementById(
+    'app-modal');
+  if (modal) modal.style.display = 'flex';
+}
+
+/* ── Enable/disable Approve button based on deduction acknowledgment checkbox ── */
+function onDedAckChange(idx) {
+  var cb = document.getElementById('ded-ack-' + idx);
+  var btn = document.getElementById('approve-btn-' + idx);
+  var lbl = document.getElementById('ded-ack-lbl-' + idx);
+  if (!cb || !btn) return;
+  if (cb.checked) {
+    btn.disabled = false;
+    btn.style.opacity = '';
+    btn.style.cursor = '';
+    if (lbl) { lbl.style.background = '#EAF3DE'; lbl.style.borderColor = '#C0DD97'; lbl.style.color = '#3B6D11'; }
+  } else {
+    btn.disabled = true;
+    btn.style.opacity = '0.45';
+    btn.style.cursor = 'not-allowed';
+    if (lbl) { lbl.style.background = '#FFFBE6'; lbl.style.borderColor = '#F5C842'; lbl.style.color = '#7A5500'; }
+  }
+}
+
+function row(label, val) {
+  return '<div class="md-row">'
+    + '<span class="md-lbl">' + label
+    + '</span><span class="md-val">'
+    + val + '</span></div>';
+}
+
+function estRow(label, val) {
+  return '<div class="md-est-row">'
+    + '<span class="md-est-lbl">' + label
+    + '</span><span class="md-est-val">'
+    + val + '</span></div>';
+}
+
+function dedInput(label, id, val, idx) {
+  return '<div class="ded-input-group">' +
+    '<label>' + label + '</label>' +
+    '<div class="ded-input-wrapper">' +
+    '<span>₱</span>' +
+    '<input type="number" step="0.01" class="ded-input" id="' + id + '-' + idx + '" value="' + (Number(val) || 0).toFixed(2) + '" oninput="calcNetProceeds(' + idx + ')" />' +
+    '</div></div>';
+}
+
+function calcNetProceeds(idx) {
+  var a = APPS[idx];
+  if (!a) return;
+  var amt = a.amount;
+  // Safe read — returns 0 if element not rendered for this loan type
+  var getV = function(id) {
+    var el = document.getElementById(id + '-' + idx);
+    return el ? (parseFloat(el.value) || 0) : 0;
+  };
+  // Past Dues (B) — collect all possible past-due fields
+  var totalB = getV('past-st') + getV('past-com') + getV('past-canteen')
+             + getV('past-ticket') + getV('past-others') + getV('past-reg');
+  // Deductions (C) — collect all possible deduction fields
+  var totalC = getV('ded-reg') + getV('ded-cbu') + getV('ded-service')
+             + getV('ded-insurance') + getV('ded-notarial');
+  var net = amt - (totalB + totalC);
+  var bEl = document.getElementById('total-b-' + idx);
+  var cEl = document.getElementById('total-c-' + idx);
+  var nEl = document.getElementById('net-proceeds-' + idx);
+  if (bEl) bEl.textContent = '₱' + totalB.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (cEl) cEl.textContent = '₱' + totalC.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (nEl) nEl.textContent = '₱' + net.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+var _appBusy = false;
+
+function approveApp(idx) {
+  if (_appBusy) return;
+  var a = window._filteredApps ? window._filteredApps[idx] : APPS[idx];
+  if (!a) return;
+  _appBusy = true;
+  // Disable all approve/reject buttons in the page
+  document.querySelectorAll('#page-applications .action-btn, #page-applications .btn-approve, #page-applications .btn-reject')
+    .forEach(function(b){ b.disabled = true; b.style.opacity = '0.5'; b.style.cursor = 'not-allowed'; });
+  showToast('Approving...');
+  google.script.run
+    .withSuccessHandler(function(r) {
+      _appBusy = false;
+      if (r && r.success) {
+        closeModal('app-modal');
+        showToast('\u2713 Application approved!');
+        // Update local status in both arrays
+        a.status = 'Approved (In Settlement)';
+        var globalIdx = APPS.findIndex(function(app) { return app.row === a.row; });
+        if (globalIdx !== -1) APPS[globalIdx].status = 'Approved (In Settlement)';
+        renderAppTable(APPS);
+      } else {
+        showToast('Error: '
+          + (r && r.message || 'Failed'));
+        // Re-enable buttons on error
+        document.querySelectorAll('#page-applications .action-btn, #page-applications .btn-approve, #page-applications .btn-reject')
+          .forEach(function(b){ b.disabled = false; b.style.opacity = ''; b.style.cursor = ''; });
+      }
+    })
+    .withFailureHandler(function(e) {
+      _appBusy = false;
+      showToast('Error: ' + e.message);
+      document.querySelectorAll('#page-applications .action-btn, #page-applications .btn-approve, #page-applications .btn-reject')
+        .forEach(function(b){ b.disabled = false; b.style.opacity = ''; b.style.cursor = ''; });
+    })
+    .approveApplication(a.row, (function() {
+      // Safe DOM read helpers — never throws even if element missing
+      function getInputVal(elId) {
+        var el = document.getElementById(elId + '-' + idx);
+        return el ? (parseFloat(el.value) || 0) : 0;
+      }
+      var pastSt       = getInputVal('past-st');
+      var pastCom      = getInputVal('past-com');
+      var pastCanteen  = getInputVal('past-canteen');
+      var pastTicket   = getInputVal('past-ticket');
+      var pastOthers   = getInputVal('past-others');
+      var dedReg       = getInputVal('ded-reg');
+      var dedCbu       = getInputVal('ded-cbu');
+      var dedService   = getInputVal('ded-service');
+      var dedInsurance = getInputVal('ded-insurance');
+      var dedNotarial  = getInputVal('ded-notarial');
+      var totalB = pastSt + pastCom + pastCanteen + pastTicket + pastOthers;
+      var totalC = dedReg + dedCbu + dedService + dedInsurance + dedNotarial;
+      var netProceeds = a.amount - (totalB + totalC);
+      return {
+        pastSt: pastSt, pastCom: pastCom, pastCanteen: pastCanteen,
+        pastTicket: pastTicket, pastOthers: pastOthers,
+        dedReg: dedReg, dedCbu: dedCbu, dedService: dedService,
+        dedInsurance: dedInsurance, dedNotarial: dedNotarial,
+        totalB: totalB, totalC: totalC, netProceeds: netProceeds
+      };
+    })());
+}
+
+var _pendingRejectIdx = null;
+
+function rejectApp(idx) {
+  if (_appBusy) return;
+  var a = APPS[idx];
+  if (!a) return;
+  _pendingRejectIdx = idx;
+  var nameEl = document.getElementById('reject-app-name');
+  if (nameEl) nameEl.textContent = a.firstName + ' ' + a.lastName + ' — ' + a.loanType + ' ₱' + Math.round(a.amount).toLocaleString();
+  var ta = document.getElementById('reject-reason-ta');
+  if (ta) ta.value = '';
+  var ov = document.getElementById('reject-ov');
+  if (ov) ov.style.display = 'flex';
+  if (ta) setTimeout(function(){ ta.focus(); }, 150);
+}
+
+function closeRejectOv() {
+  var ov = document.getElementById('reject-ov');
+  if (ov) ov.style.display = 'none';
+  _pendingRejectIdx = null;
+}
+
+function releaseLoan(idx) {
+  if (_appBusy) return;
+  var a = window._filteredApps ? window._filteredApps[idx] : APPS[idx];
+  if (!a) return;
+  _appBusy = true;
+  // Disable all action buttons
+  document.querySelectorAll('#page-applications .action-btn, #page-applications .btn-approve, #page-applications .btn-reject')
+    .forEach(function(b){ b.disabled = true; b.style.opacity = '0.5'; b.style.cursor = 'not-allowed'; });
+  showToast('Releasing loan...');
+  google.script.run
+    .withSuccessHandler(function(r) {
+      _appBusy = false;
+      if (r && r.success) {
+        showToast('\u2713 Loan released!');
+        // Update local status in both arrays
+        a.status = 'Released';
+        var globalIdx = APPS.findIndex(function(app) { return app.row === a.row; });
+        if (globalIdx !== -1) APPS[globalIdx].status = 'Released';
+        renderAppTable(APPS);
+      } else {
+        showToast('Error: ' + (r && r.message || 'Failed'));
+        document.querySelectorAll('#page-applications .action-btn, #page-applications .btn-approve, #page-applications .btn-reject')
+          .forEach(function(b){ b.disabled = false; b.style.opacity = ''; b.style.cursor = ''; });
+      }
+    })
+    .withFailureHandler(function(e) {
+      _appBusy = false;
+      showToast('Error: ' + e.message);
+      document.querySelectorAll('#page-applications .action-btn, #page-applications .btn-approve, #page-applications .btn-reject')
+        .forEach(function(b){ b.disabled = false; b.style.opacity = ''; b.style.cursor = ''; });
+    })
+    .finalReleaseLoan(a.row);
+}
+
+function toggleSelectAll() {
+  var selectAll = document.getElementById('select-all-apps');
+  var checkboxes = document.querySelectorAll('.app-checkbox');
+  checkboxes.forEach(function(cb) {
+    cb.checked = selectAll.checked;
+  });
+}
+
+function getSelectedApps() {
+  var selected = [];
+  var checkboxes = document.querySelectorAll('.app-checkbox:checked');
+  checkboxes.forEach(function(cb) {
+    var idx = parseInt(cb.getAttribute('data-index'));
+    if (APPS[idx]) selected.push(APPS[idx]);
+  });
+  return selected;
+}
+
+function bulkApprove() {
+  if (_appBusy) return;
+  var selected = getSelectedApps();
+  if (selected.length === 0) {
+    showToast('Please select at least one application.');
+    return;
+  }
+  if (!confirm('Approve ' + selected.length + ' application(s)?')) return;
+  
+  _appBusy = true;
+  var processed = 0;
+  var errors = 0;
+  
+  selected.forEach(function(a) {
+    google.script.run
+      .withSuccessHandler(function(r) {
+        processed++;
+        if (!r || !r.success) errors++;
+        else {
+          // Update local status for this app
+          var idx = APPS.findIndex(function(app) { return app.row === a.row; });
+          if (idx !== -1) APPS[idx].status = 'Approved (In Settlement)';
+        }
+        if (processed === selected.length) {
+          _appBusy = false;
+          if (errors > 0) {
+            showToast('Approved ' + (selected.length - errors) + ', ' + errors + ' failed.');
+          } else {
+            showToast('\u2713 All selected applications approved!');
+          }
+          renderAppTable(APPS);
+        }
+      })
+      .withFailureHandler(function(e) {
+        processed++;
+        errors++;
+        if (processed === selected.length) {
+          _appBusy = false;
+          showToast('Approved ' + (selected.length - errors) + ', ' + errors + ' failed.');
+          renderAppTable(APPS);
+        }
+      })
+      .approveApplication(a.row, { totalB: 0, totalC: 0, netProceeds: a.amount });
+  });
+}
+
+function bulkReject() {
+  if (_appBusy) return;
+  var selected = getSelectedApps();
+  if (selected.length === 0) {
+    showToast('Please select at least one application.');
+    return;
+  }
+  var reason = prompt('Enter rejection reason (will apply to all selected):');
+  if (!reason) return;
+  
+  _appBusy = true;
+  var processed = 0;
+  var errors = 0;
+  
+  selected.forEach(function(a) {
+    google.script.run
+      .withSuccessHandler(function(r) {
+        processed++;
+        if (!r || !r.success) errors++;
+        else {
+          // Update local status for this app
+          var idx = APPS.findIndex(function(app) { return app.row === a.row; });
+          if (idx !== -1) APPS[idx].status = 'Rejected';
+        }
+        if (processed === selected.length) {
+          _appBusy = false;
+          if (errors > 0) {
+            showToast('Rejected ' + (selected.length - errors) + ', ' + errors + ' failed.');
+          } else {
+            showToast('\u2717 All selected applications rejected.');
+          }
+          renderAppTable(APPS);
+        }
+      })
+      .withFailureHandler(function(e) {
+        processed++;
+        errors++;
+        if (processed === selected.length) {
+          _appBusy = false;
+          showToast('Rejected ' + (selected.length - errors) + ', ' + errors + ' failed.');
+          renderAppTable(APPS);
+        }
+      })
+      .rejectApplication(a.row, reason);
+  });
+}
+
+function confirmRejectApp() {
+  if (_appBusy || _pendingRejectIdx === null) return;
+  var a = window._filteredApps ? window._filteredApps[_pendingRejectIdx] : APPS[_pendingRejectIdx];
+  if (!a) return;
+  var reason = (document.getElementById('reject-reason-ta').value || '').trim();
+  _appBusy = true;
+  closeRejectOv();
+  document.querySelectorAll('#page-applications .action-btn, #page-applications .btn-approve, #page-applications .btn-reject')
+    .forEach(function(b){ b.disabled = true; b.style.opacity = '0.5'; b.style.cursor = 'not-allowed'; });
+  showToast('Rejecting...');
+  google.script.run
+    .withSuccessHandler(function(r) {
+      _appBusy = false;
+      if (r && r.success) {
+        closeModal('app-modal');
+        showToast('\u2717 Application rejected.');
+        // Update local status in both arrays
+        a.status = 'Rejected';
+        var globalIdx = APPS.findIndex(function(app) { return app.row === a.row; });
+        if (globalIdx !== -1) APPS[globalIdx].status = 'Rejected';
+        renderAppTable(APPS);
+      } else {
+        showToast('Error: '
+          + (r && r.message || 'Failed'));
+        document.querySelectorAll('#page-applications .action-btn, #page-applications .btn-approve, #page-applications .btn-reject')
+          .forEach(function(b){ b.disabled = false; b.style.opacity = ''; b.style.cursor = ''; });
+      }
+    })
+    .withFailureHandler(function(e) {
+      _appBusy = false;
+      showToast('Error: ' + e.message);
+      document.querySelectorAll('#page-applications .action-btn, #page-applications .btn-approve, #page-applications .btn-reject')
+        .forEach(function(b){ b.disabled = false; b.style.opacity = ''; b.style.cursor = ''; });
+    })
+    .rejectApplication(a.row, reason);
+}
+
+function setFilterApp(el, filter) {
+  document.querySelectorAll(
+    '#page-applications .filter-btn')
+    .forEach(function(b) {
+      b.classList.remove('on');
+    });
+  el.classList.add('on');
+
+  if (filter === 'all') {
+    renderAppTable(APPS);
+  } else {
+    var filtered = APPS.filter(function(a) {
+      return a.status.toLowerCase() === filter;
+    });
+    renderAppTable(filtered);
+  }
+}
+
+/* ── Claiming Schedule SMS ── */
+function showClaimingForm(idx) {
+  var el = document.getElementById('claiming-form-' + idx);
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function sendClaimingSched(idx) {
+  var a = APPS[idx];
+  if (!a) { showToast('Application not found.'); return; }
+  var date = (document.getElementById('claim-date-' + idx) || {}).value || '';
+  var time = (document.getElementById('claim-time-' + idx) || {}).value || '';
+  var loc  = (document.getElementById('claim-loc-' + idx) || {}).value || '';
+  if (!date) { showToast('Please select a date.'); return; }
+  var memberName = (a.firstName || '') + ' ' + (a.lastName || '');
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r && r.success) {
+        var msg = document.getElementById('claim-msg-' + idx);
+        if (msg) { msg.style.display = 'inline'; setTimeout(function(){ msg.style.display = 'none'; }, 4000); }
+        showToast('Claiming schedule email sent!');
+      } else {
+        showToast('Error: ' + (r && r.message || 'Failed to send.'));
+      }
+    })
+    .withFailureHandler(function(e) { showToast('Error: ' + e.message); })
+    .sendClaimingScheduleSms(a.memberId, memberName.trim(), a.loanType, a.amount, date, time, loc);
+}
+</script>

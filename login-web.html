@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base href="<?= scriptUrl ?>" target="_top">
+    <?!= include('login-style') ?>
+  </head>
+  <body>
+    <div class="login-wrap">
+      <div class="login-card">
+
+        <div style="padding: 20px 32px 8px;"></div>
+
+        <div class="tab-row">
+          <div class="tab-btn" id="tbtn-member" onclick="switchTab('member')">Member Login</div>
+          <div class="tab-btn on on-admin" id="tbtn-officer" onclick="switchTab('officer')">Officer Login</div>
+        </div>
+
+        <!-- OFFICER TAB -->
+        <div class="tab-body on" id="tab-officer">
+          <div class="err" id="officer-err"></div>
+
+          <!-- Role Selector -->
+          <div class="fg" id="role-pick-wrap">
+            <label class="fl">Select your section</label>
+            <div class="role-pills">
+              <div class="role-pill sel-reg" id="rpill-regular" onclick="selectOfficerRole('regular')">
+                <span>&#128218;</span> Regular
+              </div>
+              <div class="role-pill" id="rpill-shortterm" onclick="selectOfficerRole('shortterm')">
+                <span>&#9889;</span> Short Term
+              </div>
+              <div class="role-pill" id="rpill-commodity" onclick="selectOfficerRole('commodity')">
+                <span>&#127968;</span> Commodity
+              </div>
+              <div class="role-pill" id="rpill-treasurer" onclick="selectOfficerRole('treasurer')">
+                <span>&#128176;</span> Treasurer
+              </div>
+              <div class="role-pill" id="rpill-chairperson" onclick="selectOfficerRole('chairperson')">
+                <span>&#128200;</span> Chairperson
+              </div>
+            </div>
+            <input type="hidden" id="officer-role" value="regular"/>
+          </div>
+
+          <div class="admin-center" style="padding:8px 0 4px;">
+            <div class="admin-icon" id="officer-icon" style="background:#E6F1FB;">&#128293;</div>
+            <div class="admin-title" id="officer-title">Regular Loan Officer</div>
+            <div class="admin-desc" id="officer-desc">Enter your credentials to access the Regular loan section.</div>
+          </div>
+          <div class="fg">
+            <label class="fl" id="o-user-label">Email / Username</label>
+            <input class="fi" id="o-user" placeholder="Enter your email or username" onkeydown="if(event.key==='Enter')doOfficerLogin()"/>
+          </div>
+          <div class="fg">
+            <label class="fl">Password</label>
+            <div style="position:relative;">
+              <input class="fi" id="o-pw" type="password" placeholder="Enter officer password" onkeydown="if(event.key==='Enter')doOfficerLogin()" style="padding-right:44px;"/>
+              <span onclick="togglePW('o-pw',this)" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);cursor:pointer;color:#999;user-select:none;padding:8px;border-radius:6px;display:flex;align-items:center;justify-content:center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span>
+            </div>
+          </div>
+          <button class="btn-admin" id="officer-btn" onclick="doOfficerLogin()">Sign in as Officer</button>
+          <div class="hint" style="margin-top:14px;">Officer access only &middot; SKSU-IMC</div>
+        </div>
+
+        <!-- MEMBER TAB -->
+        <div class="tab-body" id="tab-member">
+          <div class="err" id="member-err">Invalid Mobile Number or password.</div>
+
+          <!-- Welcome-back UI (hidden by default, shown for returning users) -->
+          <div class="wb-wrap" id="wb-wrap" style="display:none;">
+            <div class="wb-avatar" id="wb-avatar">M</div>
+            <div class="wb-name" id="wb-name">Welcome back!</div>
+            <div class="wb-phone" id="wb-phone">09171234567</div>
+            <div class="wb-switch" id="wb-switch" onclick="clearRememberedUser()">Not you? Switch account</div>
+          </div>
+
+          <!-- Normal phone/email input (hidden when welcome-back is active) -->
+          <div class="fg" id="fg-phone">
+            <label class="fl">Username</label>
+            <input class="fi" id="m-id" placeholder="e.g. sksu@1234" type="text" onkeydown="if(event.key==='Enter')doMemberLogin()"/>
+          </div>
+          <div class="fg">
+            <label class="fl" id="lbl-pw">Password</label>
+            <div style="position:relative;">
+              <input class="fi" id="m-pw" type="password" placeholder="Enter password" onkeydown="if(event.key==='Enter')doMemberLogin()" style="padding-right:44px;"/>
+              <span onclick="togglePW('m-pw',this)" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);cursor:pointer;color:#999;user-select:none;padding:8px;border-radius:6px;display:flex;align-items:center;justify-content:center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span>
+            </div>
+          </div>
+          <div class="forgot-link" onclick="showForgotPassword()">Forgot Password?</div>
+          <button class="btn-login" id="member-btn" onclick="doMemberLogin()">Sign in as Member</button>
+          <div class="hint" id="member-hint">Use your cooperative username to log in.</div>
+  
+      </div>
+      <div style="text-align:center;padding:14px 0 22px;border-top:0.5px solid #F0EDE8;">
+        <span style="font-size:12px;color:#888;">Contact the admin office to register as a member.</span>
+      </div>
+    </div>
+    </div>
+
+    <!-- ── Forgot Password Modal ── -->
+    <div class="fp-overlay" id="fp-overlay" onclick="closeForgotPassword()">
+      <div class="fp-card" onclick="event.stopPropagation()">
+        <div class="fp-close" onclick="closeForgotPassword()">&times;</div>
+        <div class="fp-icon">&#128274;</div>
+        <div class="fp-title">Forgot Password?</div>
+        <div class="fp-desc">Enter your registered email address. We'll send you a password reset link active for 30 minutes.</div>
+        <div class="err" id="fp-err"></div>
+        <div class="ok" id="fp-ok"></div>
+        <div class="fg">
+          <label class="fl">Registered Email</label>
+          <input class="fi" id="fp-input" placeholder="e.g. member@email.com" type="email" onkeydown="if(event.key==='Enter')doForgotPassword()"/>
+        </div>
+        <button class="btn-login fp-btn" id="fp-btn" onclick="doForgotPassword()">Send Reset Link</button>
+        <div class="hint" style="margin-top:12px;">Forgot password is only available after profile setup.</div>
+      </div>
+    </div>
+
+    <!-- Hidden navigation links resolved via <base href> -->
+    <a id="goto-member" href="?page=member-home" style="display:none;"></a>
+    <a id="goto-profile-setup" href="?page=profile-setup" style="display:none;"></a>
+    <!-- ── Fullscreen Button ── -->
+    <button onclick="(function(){var el=document.documentElement;if(!document.fullscreenElement&&!document.webkitFullscreenElement){var r=el.requestFullscreen||el.webkitRequestFullscreen;if(r)r.call(el);}else{var x=document.exitFullscreen||document.webkitExitFullscreen;if(x)x.call(document);}var b=document.getElementById('fs-btn-lg');if(b)b.innerHTML=document.fullscreenElement?'&#x2715;':'&#x26F6;';})()" id="fs-btn-lg" title="Fullscreen" style="position:fixed;bottom:18px;right:18px;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1C2B3A;color:#fff;border:none;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,0.25);opacity:0.85;">&#x26F6;</button>
+    <?!= include('login-script') ?>
+  </body>
+</html>

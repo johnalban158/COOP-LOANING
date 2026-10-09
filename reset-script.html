@@ -1,0 +1,109 @@
+<script>
+var _eyeOpen = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+var _eyeClosed = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
+function togglePW(inputId, icon) {
+  var el = document.getElementById(inputId);
+  if (!el) return;
+  if (el.type === 'password') {
+    el.type = 'text';
+    icon.innerHTML = _eyeClosed;
+  } else {
+    el.type = 'password';
+    icon.innerHTML = _eyeOpen;
+  }
+}
+
+var resetToken = '<?= token ?>';
+
+(function() {
+  if (!resetToken) {
+    showError('Valid password reset token is missing. Please request a new link from the login page.');
+    var btn = document.getElementById('reset-btn');
+    if (btn) btn.disabled = true;
+  }
+})();
+
+function submitResetForm() {
+  var err = document.getElementById('reset-err');
+  var ok = document.getElementById('reset-ok');
+  var btn = document.getElementById('reset-btn');
+
+  if (err) err.style.display = 'none';
+  if (ok) ok.style.display = 'none';
+
+  if (!resetToken) {
+    showError('Missing token.');
+    return;
+  }
+
+  var newPassword = document.getElementById('r-password').value;
+  var confirmPassword = document.getElementById('r-confirm').value;
+
+  if (!newPassword || !confirmPassword) {
+    showError('All fields are required.');
+    return;
+  }
+
+  if (newPassword.length < 8) {
+    showError('Password must be at least 8 characters long.');
+    return;
+  }
+
+  if (newPassword !== confirmPassword) {
+    showError('Confirm password does not match.');
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Resetting Password...';
+  }
+
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r && r.success) {
+        showSuccess();
+      } else {
+        showError(r.message || 'Error occurred. Please try again.');
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Reset Password';
+        }
+      }
+    })
+    .withFailureHandler(function(e) {
+      showError('Connection Error: ' + e.message);
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Reset Password';
+      }
+    })
+    .resetPasswordWithToken(resetToken, newPassword);
+}
+
+function showError(msg) {
+  var err = document.getElementById('reset-err');
+  if (err) {
+    err.textContent = msg;
+    err.style.display = 'block';
+  }
+}
+
+function showSuccess() {
+  var ok = document.getElementById('reset-ok');
+  var formInputs = document.querySelectorAll('.fg, #reset-btn, .hint');
+  
+  // Hide form fields
+  for (var i = 0; i < formInputs.length; i++) {
+    formInputs[i].style.display = 'none';
+  }
+
+  if (ok) {
+    var base = document.querySelector('base');
+    var href = base ? base.href : '';
+    ok.innerHTML = '&#10004; Password reset successfully! You can now <a href="' + href + '?page=login" style="color:inherit;font-weight:bold;text-decoration:underline;">login here</a>.';
+    ok.style.display = 'block';
+  }
+}
+</script>

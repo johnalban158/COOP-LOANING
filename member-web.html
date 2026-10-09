@@ -1,0 +1,1142 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <script>window.SCRIPT_URL = '<?= scriptUrl ?>';</script>
+  <?!= include('member-style') ?>
+</head>
+
+<body>
+
+  <!-- ── Device-type badge (visible only on desktop via CSS) ── -->
+  <div class="device-badge" id="device-badge">
+    <span>🖥️</span> <span id="device-label">Desktop View</span>
+  </div>
+
+  <!-- ── Desktop info panel (beside the phone frame) ── -->
+  <div class="desktop-info" id="desktop-info-panel">
+    <div class="desktop-info-badge">📱 Mobile App Preview</div>
+    <div class="desktop-info-title">Campus<span>Coop</span><br>Member Portal</div>
+    <div class="desktop-info-desc">
+      You're viewing the member portal in desktop mode.<br>
+      On your phone, this looks and feels just like <strong>GCash</strong>.
+    </div>
+    <div class="desktop-info-features">
+      <div class="dif-item"><div class="dif-icon">💳</div>View loans &amp; balances</div>
+      <div class="dif-item"><div class="dif-icon">💰</div>Track your payments</div>
+      <div class="dif-item"><div class="dif-icon">📊</div>Analytics &amp; progress</div>
+      <div class="dif-item"><div class="dif-icon">📝</div>Apply for loans</div>
+    </div>
+  </div>
+
+  <!-- ── Phone frame wrapper (desktop) / transparent on mobile ── -->
+  <div class="phone-frame-wrap" id="phone-frame-wrap">
+
+  <!-- ── GCash-style App Shell ── -->
+  <div class="gc-app" id="gc-app">
+
+    <!-- ── Layered Premium Hero Card Header ── -->
+    <div class="gc-header" id="gc-header">
+      <div class="premium-hero-card">
+        <!-- User Profile info row -->
+        <div class="hero-user-row">
+          <div class="gc-avatar" id="sf-av">M</div>
+          <div class="hero-user-details">
+            <div class="hero-name" id="sf-name">Member Name</div>
+            <div class="hero-role" id="sf-role">Cooperative Member</div>
+          </div>
+        </div>
+
+        <div class="hero-divider"></div>
+
+        <!-- Total CBU Section -->
+        <div class="hero-cbu-section">
+          <div class="hero-cbu-label">💰 Savings &amp; Capital (CBU)</div>
+          <div class="hero-cbu-amount" id="m-cbu-display">—</div>
+          <div class="hero-cbu-sub">Your total accumulated Capital Build-Up balance</div>
+        </div>
+
+        <!-- Outstanding Balance Section (Visually separate to avoid confusion) -->
+        <div class="hero-outstanding-section">
+          <div class="hero-outstanding-label">Outstanding Loan Debt</div>
+          <div class="hero-outstanding-amount" id="m-balance-total">—</div>
+          <div class="hero-outstanding-sub">Active debt obligated to be repaid</div>
+        </div>
+
+        <!-- Hidden compat elements for JS compatibility -->
+        <span id="m-active-count" style="display:none;"></span>
+      </div>
+    </div>
+
+    <!-- ── Quick Actions ── -->
+    <div class="gc-quick-actions">
+      <div class="gc-qa-title">Quick Actions</div>
+      <div class="gc-qa-grid">
+        <div class="gc-qa-item" id="nav-dashboard" onclick="switchPage('dashboard',this)">
+          <div class="gc-qa-icon blue">🏠</div>
+          <div class="gc-qa-label">Dashboard</div>
+        </div>
+        <div class="gc-qa-item" id="nav-loans" onclick="switchPage('loans',this)">
+          <div class="gc-qa-icon green">📋</div>
+          <div class="gc-qa-label">My Loans</div>
+        </div>
+        <div class="gc-qa-item" id="nav-payments" onclick="switchPage('payments',this)">
+          <div class="gc-qa-icon amber">💳</div>
+          <div class="gc-qa-label">Payments</div>
+        </div>
+        <div class="gc-qa-item" id="nav-profile" onclick="switchPage('profile',this)">
+          <div class="gc-qa-icon purple">👤</div>
+          <div class="gc-qa-label">Profile</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Scrollable Content ── -->
+    <div class="gc-content" id="gc-content">
+      <!-- Page title bar (inside content, mobile-style) -->
+      <div id="gc-page-bar" style="display:flex;align-items:center;justify-content:space-between;padding:14px 0 8px;margin-bottom:4px;">
+        <div style="font-size:16px;font-weight:800;color:#1a1a2e;" id="page-title">My Dashboard</div>
+        <div style="font-size:11px;color:#aaa;font-weight:500;">AY 2025–2026</div>
+      </div>
+
+
+        <!-- PAGE: DASHBOARD -->
+        <div id="page-dashboard">
+          <div class="welcome">
+            <div>
+              <h2>Good day! &#128075;</h2>
+              <p>Here is your cooperative loan summary.</p>
+            </div>
+            <div class="welcome-badge" id="member-badge">Member</div>
+          </div>
+
+          <!-- Hidden compat elements -->
+          <span id="m-monthly-total" style="display:none"></span>
+          <span id="m-pending-count" style="display:none"></span>
+          <span id="np-loan" style="display:none"></span>
+          <span id="np-principal" style="display:none"></span>
+          <span id="np-interest" style="display:none"></span>
+          <span id="np-total" style="display:none"></span>
+          <span id="np-badge" style="display:none"></span>
+          <span id="cbu-amount" style="display:none"></span>
+          <span id="cbu-bar" style="display:none"></span>
+          <span id="cbu-bar-label" style="display:none"></span>
+          <span id="cbu-max-stl" style="display:none"></span>
+          <span id="cbu-max-reg" style="display:none"></span>
+          <span id="cbu-max-com" style="display:none"></span>
+          <span id="cbu-pct-stl" style="display:none"></span>
+          <span id="cbu-pct-reg" style="display:none"></span>
+          <span id="cbu-pct-com" style="display:none"></span>
+          <span id="apply-max-stl" style="display:none"></span>
+          <span id="apply-max-reg" style="display:none"></span>
+          <span id="apply-max-com" style="display:none"></span>
+          <span id="apply-card-regular" style="display:none"></span>
+
+          <!-- Active loan cards with actions -->
+          <div id="home-active-loans">
+            <div style="background:#fff;border:0.5px solid #E0DDD6;border-radius:14px;padding:36px;text-align:center;margin-bottom:14px;">
+              <div style="font-size:28px;margin-bottom:8px;">&#128203;</div>
+              <div style="font-size:13px;font-weight:600;color:#555;">Loading your loans...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PAGE: SHORT TERM -->
+        <div id="page-shortterm" style="display:none;">
+          <div class="info-banner ib-blue">
+            <div class="ib-icon">&#9889;</div>
+            <div>
+              <div class="ib-title" style="color:#185FA5;">Short Term Loan</div>
+              <div class="ib-text" style="color:#185FA5;">Max &#8369;15,000 &middot; 1&ndash;6 months &middot; 6% flat
+                interest &middot; Available to all members</div>
+            </div>
+          </div>
+          <div class="empty-state" style="margin-top:20px;">
+            <div class="empty-icon">&#9889;</div>
+            <div class="empty-title">Apply for a Short Term Loan</div>
+            <div class="empty-sub">Submit your loan application and wait for admin approval. You will be notified via SMS and email once reviewed.</div>
+            <button class="btn-full" style="background:#1C2B3A;color:#fff;" onclick="openM('stl')">Apply for STL</button>
+          </div>
+        </div>
+
+        <!-- PAGE: REGULAR -->
+        <div id="page-regular" style="display:none;">
+          <div class="info-banner ib-green">
+            <div class="ib-icon">&#127970;</div>
+            <div>
+              <div class="ib-title" style="color:#3B6D11;">Regular Loan</div>
+              <div class="ib-text" style="color:#3B6D11;">Max &#8369;200,000 or 3&times; capital &middot; 1&ndash;5
+                years &middot; 1% monthly diminishing interest &middot; Teachers only</div>
+            </div>
+          </div>
+          <div class="empty-state" style="margin-top:20px;">
+            <div class="empty-icon">&#127970;</div>
+            <div class="empty-title">Apply for a Regular Loan</div>
+            <div class="empty-sub">Submit your loan application and wait for admin approval. You will be notified via SMS and email once reviewed.</div>
+            <button class="btn-full" style="background:#3B6D11;color:#fff;" onclick="openM('reg')">Apply for Regular Loan</button>
+          </div>
+        </div>
+
+        <!-- PAGE: COMMODITY -->
+        <div id="page-commodity" style="display:none;">
+          <div class="info-banner ib-purple">
+            <div class="ib-icon">&#128722;</div>
+            <div>
+              <div class="ib-title" style="color:#6B3B9A;">Commodity Loan</div>
+              <div class="ib-text" style="color:#6B3B9A;">Max &#8369;5,000 &middot; Max 2 months &middot; 1% interest
+                per month &middot; Available to all members</div>
+            </div>
+          </div>
+          <div class="empty-state" style="margin-top:20px;">
+            <div class="empty-icon">&#128722;</div>
+            <div class="empty-title">Apply for a Commodity Loan</div>
+            <div class="empty-sub">Submit your loan application to purchase goods through the cooperative store. You will be notified via SMS and email once reviewed.</div>
+            <button class="btn-full" style="background:#6B3B9A;color:#fff;" onclick="openM('com')">Apply for Commodity Loan</button>
+          </div>
+        </div>
+
+        <!-- PAGE: PROFILE -->
+        <div id="page-profile" style="display:none;">
+          <div class="cards-row">
+            <div class="card bl1">
+              <div class="card-label">Member ID</div>
+              <div class="card-val" id="prof-id">&mdash;</div>
+              <div class="card-sub">Your unique ID</div>
+            </div>
+            <div class="card bl2">
+              <div class="card-label">Member type</div>
+              <div class="card-val" id="prof-type">&mdash;</div>
+              <div class="card-sub">Teacher or Job Order</div>
+            </div>
+            <div class="card bl3">
+              <div class="card-label">Capital</div>
+              <div class="card-val" id="prof-cap">&mdash;</div>
+              <div class="card-sub">Total contributions</div>
+            </div>
+            <div class="card bl4">
+              <div class="card-label">Date joined</div>
+              <div class="card-val" id="prof-date">&mdash;</div>
+              <div class="card-sub">Member since</div>
+            </div>
+          </div>
+          <div style="background:#fff;border:0.5px solid #E0DDD6;border-radius:12px;padding:40px;text-align:center;margin-bottom:18px;">
+            <div style="font-size:32px;margin-bottom:10px;">&#128100;</div>
+            <div style="font-size:18px;font-weight:600;color:#333;margin-bottom:5px;" id="prof-fullname">Member Name</div>
+            <div style="font-size:13px;color:#555;margin-bottom:5px;" id="prof-email-display"></div>
+            <div style="font-size:13px;color:#555;margin-bottom:5px;" id="prof-dept">Department</div>
+          </div>
+
+          <!-- Editable Contact Info -->
+          <div style="background:#fff;border:0.5px solid #E0DDD6;border-radius:12px;padding:28px 32px;">
+            <div style="font-size:14px;font-weight:600;color:#1a1a1a;margin-bottom:4px;">&#128221; Edit Profile Info</div>
+            <div style="font-size:12px;color:#888;margin-bottom:18px;">Update your email, phone number, and department for loan notifications and reminders.</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px;">
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:6px;">Email Address</label>
+                <input type="email" id="prof-email-input" placeholder="your.email@gmail.com" style="width:100%;padding:10px 14px;border:0.5px solid #E0DDD6;border-radius:8px;font-size:13px;font-family:'Montserrat',sans-serif;box-sizing:border-box;outline:none;background:#FAFAF8;" onfocus="this.style.borderColor='#7BBFFF';this.style.background='#fff'" onblur="this.style.borderColor='#E0DDD6';this.style.background='#FAFAF8'" />
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:6px;">Phone Number</label>
+                <input type="tel" id="prof-phone-input" placeholder="09171234567" style="width:100%;padding:10px 14px;border:0.5px solid #E0DDD6;border-radius:8px;font-size:13px;font-family:'Montserrat',sans-serif;box-sizing:border-box;outline:none;background:#FAFAF8;" onfocus="this.style.borderColor='#7BBFFF';this.style.background='#fff'" onblur="this.style.borderColor='#E0DDD6';this.style.background='#FAFAF8'" />
+              </div>
+              <div style="grid-column: 1 / -1;">
+                <label style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:6px;">Department / Office</label>
+                <input type="text" id="prof-dept-input" placeholder="e.g. College of Science" style="width:100%;padding:10px 14px;border:0.5px solid #E0DDD6;border-radius:8px;font-size:13px;font-family:'Montserrat',sans-serif;box-sizing:border-box;outline:none;background:#FAFAF8;" onfocus="this.style.borderColor='#7BBFFF';this.style.background='#fff'" onblur="this.style.borderColor='#E0DDD6';this.style.background='#FAFAF8'" />
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;">
+              <button id="prof-save-btn" onclick="saveProfileContact()" style="padding:10px 28px;background:#1C2B3A;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Montserrat',sans-serif;">Save Changes</button>
+              <span id="prof-save-msg" style="font-size:12px;color:#3B6D11;display:none;">&#10003; Saved!</span>
+            </div>
+          </div>
+
+          <!-- Change Member ID (Login ID) -->
+          <div style="background:#fff;border:0.5px solid #E0DDD6;border-radius:12px;padding:28px 32px;margin-top:18px;">
+            <div style="font-size:14px;font-weight:600;color:#1a1a1a;margin-bottom:4px;">&#128273; Change Member ID (Login ID)</div>
+            <div style="font-size:12px;color:#888;margin-bottom:18px;">Your Member ID is used to log in. Changing it will update your login credentials across the system. Enter your current password to verify.</div>
+            <div style="display:grid;grid-template-columns:1fr;gap:14px;max-width:360px;margin-bottom:18px;">
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:6px;">Current Password</label>
+                <input type="password" id="mid-current-pw" placeholder="Enter current password" style="width:100%;padding:10px 14px;border:0.5px solid #E0DDD6;border-radius:8px;font-size:13px;font-family:'Montserrat',sans-serif;box-sizing:border-box;outline:none;background:#FAFAF8;" onfocus="this.style.borderColor='#7BBFFF';this.style.background='#fff'" onblur="this.style.borderColor='#E0DDD6';this.style.background='#FAFAF8'" />
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:6px;">New Member ID</label>
+                <input type="text" id="mid-new" placeholder="Enter new Member ID (e.g. 09171234567)" style="width:100%;padding:10px 14px;border:0.5px solid #E0DDD6;border-radius:8px;font-size:13px;font-family:'Montserrat',sans-serif;box-sizing:border-box;outline:none;background:#FAFAF8;" onfocus="this.style.borderColor='#7BBFFF';this.style.background='#fff'" onblur="this.style.borderColor='#E0DDD6';this.style.background='#FAFAF8'" />
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:6px;">Confirm New Member ID</label>
+                <input type="text" id="mid-confirm" placeholder="Re-enter new Member ID" style="width:100%;padding:10px 14px;border:0.5px solid #E0DDD6;border-radius:8px;font-size:13px;font-family:'Montserrat',sans-serif;box-sizing:border-box;outline:none;background:#FAFAF8;" onfocus="this.style.borderColor='#7BBFFF';this.style.background='#fff'" onblur="this.style.borderColor='#E0DDD6';this.style.background='#FAFAF8'" />
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;">
+              <button id="mid-save-btn" onclick="changeMemberId()" style="padding:10px 28px;background:#1C2B3A;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Montserrat',sans-serif;">Update Member ID</button>
+              <span id="mid-save-msg" style="font-size:12px;display:none;"></span>
+            </div>
+          </div>
+
+          <!-- Change Password -->
+          <div style="background:#fff;border:0.5px solid #E0DDD6;border-radius:12px;padding:28px 32px;margin-top:18px;">
+            <div style="font-size:14px;font-weight:600;color:#1a1a1a;margin-bottom:4px;">&#128274; Change Password</div>
+            <div style="font-size:12px;color:#888;margin-bottom:18px;">Enter your current password to verify your identity, then set your new password.</div>
+            <div style="display:grid;grid-template-columns:1fr;gap:14px;max-width:360px;margin-bottom:18px;">
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:6px;">Current Password</label>
+                <input type="password" id="pw-current" placeholder="Enter current password" style="width:100%;padding:10px 14px;border:0.5px solid #E0DDD6;border-radius:8px;font-size:13px;font-family:'Montserrat',sans-serif;box-sizing:border-box;outline:none;background:#FAFAF8;" onfocus="this.style.borderColor='#7BBFFF';this.style.background='#fff'" onblur="this.style.borderColor='#E0DDD6';this.style.background='#FAFAF8'" />
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:6px;">New Password</label>
+                <input type="password" id="pw-new" placeholder="Enter new password" style="width:100%;padding:10px 14px;border:0.5px solid #E0DDD6;border-radius:8px;font-size:13px;font-family:'Montserrat',sans-serif;box-sizing:border-box;outline:none;background:#FAFAF8;" onfocus="this.style.borderColor='#7BBFFF';this.style.background='#fff'" onblur="this.style.borderColor='#E0DDD6';this.style.background='#FAFAF8'" />
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:6px;">Confirm New Password</label>
+                <input type="password" id="pw-confirm" placeholder="Re-enter new password" style="width:100%;padding:10px 14px;border:0.5px solid #E0DDD6;border-radius:8px;font-size:13px;font-family:'Montserrat',sans-serif;box-sizing:border-box;outline:none;background:#FAFAF8;" onfocus="this.style.borderColor='#7BBFFF';this.style.background='#fff'" onblur="this.style.borderColor='#E0DDD6';this.style.background='#FAFAF8'" />
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;">
+              <button id="pw-save-btn" onclick="changeMemberPW()" style="padding:10px 28px;background:#1C2B3A;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Montserrat',sans-serif;">Update Password</button>
+              <span id="pw-save-msg" style="font-size:12px;display:none;"></span>
+            </div>
+          </div>
+
+          <!-- CBU History -->
+          <div style="background:#fff;border:0.5px solid #E0DDD6;border-radius:12px;padding:28px 32px;margin-top:18px;">
+            <div style="font-size:14px;font-weight:600;color:#1a1a1a;margin-bottom:4px;">&#128176; Capital Build-Up (CBU) History</div>
+            <div style="font-size:12px;color:#888;margin-bottom:16px;">Your CBU deductions from approved loans.</div>
+
+            <div id="cbu-history-loading" style="text-align:center;padding:20px;color:#888;">Loading CBU history...</div>
+            <div id="cbu-history-content" style="display:none;">
+              <div style="display:flex;gap:16px;margin-bottom:16px;">
+                <div style="flex:1;background:#F0FDF4;border-radius:10px;padding:12px;text-align:center;">
+                  <div style="font-size:10px;color:#6B7280;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">Current CBU</div>
+                  <div style="font-size:20px;font-weight:800;color:#065F46;" id="cbu-cur">—</div>
+                </div>
+                <div style="flex:1;background:#FEF2F2;border-radius:10px;padding:12px;text-align:center;">
+                  <div style="font-size:10px;color:#6B7280;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">Total Deducted</div>
+                  <div style="font-size:20px;font-weight:800;color:#991B1B;" id="cbu-deducted">—</div>
+                </div>
+              </div>
+              <div style="overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                  <thead>
+                    <tr style="background:#F9FAFB;">
+                      <th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;">Loan</th>
+                      <th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;">Type</th>
+                      <th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;">Amount</th>
+                      <th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;">Date</th>
+                      <th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="cbu-history-table"></tbody>
+                </table>
+              </div>
+              <div id="cbu-history-empty" style="display:none;text-align:center;padding:20px;color:#888;font-size:13px;">No loan deductions recorded yet.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PAGE: MY LOANS — Swipeable Application Carousel -->
+        <div id="page-loans" style="display:none;">
+          <!-- Hidden compat elements -->
+          <span id="loans-active-count" style="display:none"></span>
+          <span id="loans-total-bal" style="display:none"></span>
+          <span id="loans-outstanding-bal" style="display:none"></span>
+          <span id="loans-monthly-due" style="display:none"></span>
+          <span id="loans-paid-count" style="display:none"></span>
+          <div id="loans-list" style="display:none"></div>
+
+          <div style="padding:4px 0 12px;">
+            <div style="font-size:15px;font-weight:800;color:#1a1a2e;">Apply for a Loan</div>
+            <div style="font-size:12px;color:#888;margin-top:3px;">Swipe left or right to browse loan types</div>
+          </div>
+
+          <!-- Carousel wrapper -->
+          <div class="loan-carousel-wrap" id="loan-carousel-wrap">
+            <div class="loan-carousel" id="loan-carousel">
+              <!-- Cards rendered by JS via renderLoanCarousel() -->
+            </div>
+            <!-- Dot indicators -->
+            <div class="carousel-dots" id="carousel-dots"></div>
+            <!-- Navigation arrows (desktop) -->
+            <button class="carousel-arrow carousel-prev" id="carousel-prev" onclick="carouselNav(-1)">&#8249;</button>
+            <button class="carousel-arrow carousel-next" id="carousel-next" onclick="carouselNav(1)">&#8250;</button>
+          </div>
+        </div>
+
+        <!-- PAGE: MY PAYMENTS -->
+        <div id="page-payments" style="display:none;">
+
+          <button class="btn-pay-now-full" onclick="openPayModal()">&#128179; Make a Payment</button>
+
+          <div class="section-header">
+            <div class="section-title">Payment schedule &amp; history</div>
+          </div>
+          <div class="pay-filter-row">
+            <div class="pf-btn on" id="pf-btn-all" onclick="filterPay(this,'all')">All</div>
+            <div class="pf-btn" id="pf-btn-regular" onclick="filterPay(this,'Regular')">Regular</div>
+            <div class="pf-btn" id="pf-btn-stl" onclick="filterPay(this,'Short Term')">STL</div>
+            <div class="pf-btn" id="pf-btn-commodity" onclick="filterPay(this,'Commodity')">Commodity</div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Month</th>
+                  <th>Loan</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="pay-table">
+                <tr>
+                  <td colspan="4">
+                    <div class="empty-state">
+                      <div class="empty-icon">&#128179;</div>
+                      <div class="empty-title">My payment history</div>
+                      <div class="empty-sub">All your payments will appear here once your spreadsheet is connected.
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+
+        <!-- PAGE: ANALYTICS -->
+        <div id="page-analytics" style="display:none;">
+          <!-- Overall Progress -->
+          <div class="ana-hero">
+            <div class="ana-ring-wrap">
+              <svg class="ana-ring" viewBox="0 0 120 120">
+                <circle class="ana-ring-bg" cx="60" cy="60" r="52" />
+                <circle class="ana-ring-fg" id="ana-ring-fg" cx="60" cy="60" r="52" 
+                  stroke-dasharray="326.73" stroke-dashoffset="326.73" />
+              </svg>
+              <div class="ana-ring-text">
+                <div class="ana-ring-pct" id="ana-pct">0%</div>
+                <div class="ana-ring-label">Paid</div>
+              </div>
+            </div>
+            <div class="ana-hero-info">
+              <div class="ana-hero-title">Loan Completion</div>
+              <div class="ana-hero-sub" id="ana-summary">Loading your analytics...</div>
+            </div>
+          </div>
+
+          <!-- Stat Cards -->
+          <div class="cards-row">
+            <div class="card bl2">
+              <div class="card-label">Total paid</div>
+              <div class="card-val" id="ana-total-paid">&mdash;</div>
+              <div class="card-sub">Confirmed payments</div>
+            </div>
+            <div class="card bl4">
+              <div class="card-label">Remaining</div>
+              <div class="card-val" id="ana-remaining">&mdash;</div>
+              <div class="card-sub">Still to pay</div>
+            </div>
+            <div class="card bl1">
+              <div class="card-label">Monthly due</div>
+              <div class="card-val" id="ana-monthly">&mdash;</div>
+              <div class="card-sub">All loans combined</div>
+            </div>
+            <div class="card bl3">
+              <div class="card-label">Est. completion</div>
+              <div class="card-val" id="ana-eta" style="font-size:15px;">&mdash;</div>
+              <div class="card-sub">At current pace</div>
+            </div>
+          </div>
+
+          <!-- Per-Loan Breakdown -->
+          <div class="sec-hdr"><div class="sec-title">Per-loan progress</div></div>
+          <div id="ana-loans-list">
+            <div style="background:#fff;border:0.5px solid #E0DDD6;border-radius:12px;padding:36px;text-align:center;margin-bottom:18px;">
+              <div style="font-size:28px;margin-bottom:8px;">&#128202;</div>
+              <div style="font-size:13px;font-weight:600;color:#555;">No active loans</div>
+              <div style="font-size:12px;color:#aaa;">Apply for a loan to see your progress here.</div>
+            </div>
+          </div>
+
+          <!-- Payment Summary -->
+          <div class="sec-hdr"><div class="sec-title">Payment summary</div></div>
+          <div class="ana-pay-summary">
+            <div class="ana-ps-item">
+              <div class="ana-ps-icon" style="background:#EAF3DE;color:#3B6D11;">&#10003;</div>
+              <div><div class="ana-ps-val" id="ana-confirmed-count">0</div><div class="ana-ps-lbl">Confirmed</div></div>
+            </div>
+            <div class="ana-ps-item">
+              <div class="ana-ps-icon" style="background:#FAEEDA;color:#854F0B;">&#8987;</div>
+              <div><div class="ana-ps-val" id="ana-pending-count">0</div><div class="ana-ps-lbl">Pending</div></div>
+            </div>
+            <div class="ana-ps-item">
+              <div class="ana-ps-icon" style="background:#E6F1FB;color:#185FA5;">&#128179;</div>
+              <div><div class="ana-ps-val" id="ana-total-payments">0</div><div class="ana-ps-lbl">Total</div></div>
+            </div>
+          </div>
+
+          <!-- Ask Admin -->
+          <div class="sec-hdr" style="margin-top:24px;"><div class="sec-title">&#128172; Ask the Admin</div></div>
+          <div class="ana-ask-box">
+            <div class="ana-ask-desc">Have a question about your payment or loan? Send a message directly to the admin and they'll get back to you via email.</div>
+            <div class="fg">
+              <label class="fl">Topic</label>
+              <select class="fi" id="ask-topic" style="font-family:'Plus Jakarta Sans',sans-serif;">
+                <option value="Payment Question">Payment Question</option>
+                <option value="Schedule Inquiry">Schedule Inquiry</option>
+                <option value="Loan Balance">Loan Balance</option>
+                <option value="General Question">General Question</option>
+              </select>
+            </div>
+            <div class="fg">
+              <label class="fl">Your message</label>
+              <textarea class="fi" id="ask-message" rows="4" placeholder="Type your question here..." style="font-family:'Plus Jakarta Sans',sans-serif;resize:vertical;"></textarea>
+            </div>
+            <button class="ana-ask-btn" id="ask-send-btn" onclick="sendAdminQuestion()">
+              &#9993; Send to Admin
+            </button>
+            <div class="ana-ask-success" id="ask-success" style="display:none;">
+              &#10003; Message sent! The admin will reply to your email.
+            </div>
+          </div>
+        </div>
+
+        <!-- PAGE: MY LOAN LEDGER -->
+        <div id="page-ledger" style="display:none;">
+          <!-- Section: Payment Schedule & History -->
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+            <div style="font-size:13px;font-weight:700;color:#111827;">Payment Schedule &amp; History</div>
+          </div>
+          <div class="ml-filter-row" id="ml-filter-row">
+            <div class="ml-filter-btn ml-on" onclick="mlFilterSchedule(this,'all')">All</div>
+            <div class="ml-filter-btn" onclick="mlFilterSchedule(this,'Paid')">Paid</div>
+            <div class="ml-filter-btn" onclick="mlFilterSchedule(this,'Due')">Due</div>
+            <div class="ml-filter-btn" onclick="mlFilterSchedule(this,'Upcoming')">Upcoming</div>
+          </div>
+
+          <!-- Schedule Table -->
+          <div class="ml-table-wrap" id="ml-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Due Date</th>
+                  <th>Principal</th>
+                  <th>Total Due</th>
+                  <th>Balance After</th>
+                </tr>
+              </thead>
+              <tbody id="ml-table-body">
+                <tr><td colspan="4">
+                  <div class="ml-empty">
+                    <div class="ml-empty-icon">&#128179;</div>
+                    <div class="ml-empty-title">My Loan Ledger</div>
+                    <div class="ml-empty-sub">Your payment history will appear here.</div>
+                  </div>
+                </td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div><!-- end last page div -->
+
+    </div><!-- end gc-content -->
+
+    <!-- ── GCash-style Bottom Navigation ── -->
+    <div class="gc-bottom-nav">
+      <div class="gc-nav-item active" id="gc-nav-dashboard" onclick="switchPage('dashboard',this)">
+        <div class="gc-nav-icon">🏠</div>
+        <div>Home</div>
+      </div>
+      <div class="gc-nav-item" id="gc-nav-loans" onclick="switchPage('loans',this)">
+        <div class="gc-nav-icon">📋</div>
+        <div>Loans</div>
+      </div>
+      <div class="gc-nav-item" id="gc-nav-ledger" onclick="switchPage('ledger',this)">
+        <div class="gc-nav-icon">📒</div>
+        <div>Ledger</div>
+      </div>
+      <div class="gc-nav-item" id="gc-nav-payments" onclick="switchPage('payments',this)">
+        <div class="gc-nav-icon">💳</div>
+        <div>Payments</div>
+      </div>
+      <div class="gc-nav-item" id="gc-nav-analytics" onclick="switchPage('analytics',this)">
+        <div class="gc-nav-icon">📊</div>
+        <div>Analytics</div>
+      </div>
+      <div class="gc-nav-item" id="gc-nav-profile" onclick="switchPage('profile',this)">
+        <div class="gc-nav-icon">👤</div>
+        <div>Profile</div>
+      </div>
+    </div>
+
+  </div><!-- end gc-app -->
+  </div><!-- end phone-frame-wrap -->
+
+  <div class="or-ov" id="m-or-ov" onclick="if(event.target===this)closeMemberOR()">
+    <div class="or-modal">
+      <div class="or-mh">
+        <div class="or-mt">&#128196; Official Receipt</div>
+        <span class="or-mx" onclick="closeMemberOR()">&times;</span>
+      </div>
+      <div class="or-mb" id="m-or-card-print">
+        <div class="or-card">
+          <div class="or-card-header">
+            <div class="or-org">CAMPUS<span>COOP</span></div>
+            <div class="or-org-sub">Cooperative Loan System &middot; SKSU</div>
+            <div class="or-badge">OFFICIAL RECEIPT</div>
+          </div>
+          <div class="or-ref-row">
+            <div class="or-ref-label">Reference Number</div>
+            <div class="or-ref-val" id="m-or-ref">&mdash;</div>
+          </div>
+          <div class="or-detail-grid">
+            <div class="or-detail-item">
+              <div class="or-dl">Member Name</div>
+              <div class="or-dv" id="m-or-name">&mdash;</div>
+            </div>
+            <div class="or-detail-item">
+              <div class="or-dl">Member ID</div>
+              <div class="or-dv" id="m-or-id">&mdash;</div>
+            </div>
+            <div class="or-detail-item">
+              <div class="or-dl">Loan Type</div>
+              <div class="or-dv" id="m-or-loan">&mdash;</div>
+            </div>
+            <div class="or-detail-item">
+              <div class="or-dl">Month Number</div>
+              <div class="or-dv" id="m-or-month">&mdash;</div>
+            </div>
+            <div class="or-detail-item">
+              <div class="or-dl">Amount Paid</div>
+              <div class="or-dv or-amt" id="m-or-amount">&mdash;</div>
+            </div>
+            <div class="or-detail-item">
+              <div class="or-dl">Payment Method</div>
+              <div class="or-dv" id="m-or-method">&mdash;</div>
+            </div>
+            <div class="or-detail-item">
+              <div class="or-dl">Date &amp; Time</div>
+              <div class="or-dv" id="m-or-datetime">&mdash;</div>
+            </div>
+            <div class="or-detail-item">
+              <div class="or-dl">Status</div>
+              <div class="or-dv or-status-val" id="m-or-status">CONFIRMED</div>
+            </div>
+          </div>
+          <div class="or-note">&#128196; This is your official proof of payment. Please keep this for your records.</div>
+        </div>
+        <div class="or-actions">
+          <button class="or-btn-print" onclick="downloadMemberOR()">&#128424; Download as PDF</button>
+          <button class="or-btn-close" onclick="closeMemberOR()">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <!-- SHORT TERM LOAN MODAL -->
+  <div class="ov" id="ov-stl" onclick="if(event.target===this)closeM('stl')">
+    <div class="modal">
+      <div class="mh">
+        <div class="mt">&#9889; Short Term Loan Application</div><span class="mx" onclick="closeM('stl')">&times;</span>
+      </div>
+      <div class="mb">
+        <div class="sbox" id="stl-ok">
+          <div class="sicon">&#9989;</div>
+          <div class="stit">Application submitted!</div>
+          <div class="ssub">Your short term loan application has been sent to the loan officer for review. You will be
+            notified once it is approved.</div>
+          <button class="sdone" onclick="closeM('stl')">Close</button>
+        </div>
+        <div id="stl-form">
+          <!-- CBU Info Banner -->
+          <div class="modal-cbu-banner">
+            <div class="mcb-icon">&#128176;</div>
+            <div class="mcb-info">
+              <div class="mcb-label">Your Capital Build-Up (CBU)</div>
+              <div class="mcb-amount" id="stl-modal-cbu">&mdash;</div>
+            </div>
+            <div class="mcb-right">
+              <div class="mcb-max-label">Max Loanable</div>
+              <div class="mcb-max-val" id="stl-modal-max">&mdash;</div>
+            </div>
+          </div>
+          <span class="ltag ltag-b">&#9889; Short Term Loan &middot; 6% flat interest</span>
+          <div class="lrule lrule-b"><strong>Rules:</strong> 1 to 6 months &middot; 6%
+            flat interest rate &middot; Monthly = (Amount &times; 1.06) &divide; Months &middot; Available to all
+            members &middot; <strong>Max amount based on your CBU</strong></div>
+          <div class="mlbl">Loan amount</div>
+          <div class="fg">
+            <div class="sr"><input type="range" class="sl sl-b" id="s-amt" min="1000" max="15000" step="500"
+                value="10000" oninput="calcSTL()" /><span class="sv" id="s-amt-v">&#8369;10,000</span></div>
+            <div class="fhint">Minimum &#8369;1,000 &middot; Maximum &#8369;15,000</div>
+          </div>
+          <div class="mlbl">Number of months</div>
+          <div class="fg">
+            <div class="sr"><input type="range" class="sl sl-b" id="s-mo" min="1" max="6" step="1" value="4"
+                oninput="calcSTL()" /><span class="sv" id="s-mo-v">4 months</span></div>
+            <div class="fhint">Minimum 1 month &middot; Maximum 6 months</div>
+          </div>
+          <div class="est est-b">
+            <div class="ett ett-b">Payment estimate</div>
+            <div class="eg">
+              <div class="ei">
+                <div class="eil">Monthly payment</div>
+                <div class="eiv eiv-b" id="s-monthly">&#8369;2,650</div>
+              </div>
+              <div class="ei">
+                <div class="eil">Total interest</div>
+                <div class="eiv eiv-b" id="s-int">&#8369;600</div>
+              </div>
+              <div class="ei">
+                <div class="eil">Total to pay</div>
+                <div class="eiv eiv-b" id="s-total">&#8369;10,600</div>
+              </div>
+            </div>
+          </div>
+          <div class="ded-preview" id="stl-ded-preview" style="margin-top:14px;background:#F8F7F5;border:1px solid #E0DDD6;border-radius:10px;padding:16px;font-size:12px;">
+            <div style="font-size:13px;font-weight:700;color:#1C2B3A;margin-bottom:10px;">&#128203; Certification Past Dues / Deductions</div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #E8E5DF;"><span style="color:#888;">Amount Applied (A)</span><span style="font-weight:700;" id="stl-ded-amt">&#8369;0</span></div>
+            <div style="font-size:11px;font-weight:600;color:#185FA5;text-transform:uppercase;margin:10px 0 4px;">Deductions (C)</div>
+            <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Service Fee</span><span id="stl-ded-service">&#8369;0</span></div>
+            <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Insurance</span><span id="stl-ded-insurance">&#8369;0</span></div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid #E8E5DF;font-weight:600;"><span>Total (C)</span><span id="stl-ded-totalc">&#8369;0</span></div>
+            <div style="display:flex;justify-content:space-between;padding:10px 0 0;font-weight:700;font-size:14px;color:#3B6D11;border-top:2px solid #1C2B3A;margin-top:8px;"><span>Net Proceeds (A &minus; C)</span><span id="stl-ded-net">&#8369;0</span></div>
+          </div>
+          <div class="mf"><button class="bcn" onclick="closeM('stl')">Cancel</button><button class="bsub bsub-b"
+              onclick="subSTL()">Submit Application</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- REGULAR LOAN MODAL -->
+  <div class="ov" id="ov-reg" onclick="if(event.target===this)closeM('reg')">
+    <div class="modal">
+      <div class="mh">
+        <div class="mt">&#127970; Regular Loan Application</div><span class="mx" onclick="closeM('reg')">&times;</span>
+      </div>
+      <div class="mb">
+        <div class="sbox" id="reg-ok">
+          <div class="sicon">&#9989;</div>
+          <div class="stit">Application submitted!</div>
+          <div class="ssub">Your regular loan application has been sent to the loan officer for review. You will be
+            notified once it is approved.</div>
+          <button class="sdone" onclick="closeM('reg')">Close</button>
+        </div>
+        <div id="reg-form">
+          <!-- CBU Info Banner -->
+          <div class="modal-cbu-banner">
+            <div class="mcb-icon">&#128176;</div>
+            <div class="mcb-info">
+              <div class="mcb-label">Your Capital Build-Up (CBU)</div>
+              <div class="mcb-amount" id="reg-modal-cbu">&mdash;</div>
+            </div>
+            <div class="mcb-right">
+              <div class="mcb-max-label">Max Loanable</div>
+              <div class="mcb-max-val" id="reg-modal-max">&mdash;</div>
+            </div>
+          </div>
+          <span class="ltag ltag-g">&#127970; Regular Loan &middot; 1% diminishing &middot; Teachers only</span>
+          <div class="lrule lrule-g"><strong>Rules:</strong> Up to 3&times; your CBU or &#8369;200,000 (whichever is lower) &middot; 1 to 5
+            years &middot; 1% monthly diminishing interest &middot; Principal is fixed, interest decreases each month
+            &middot; Teachers only</div>
+          <div class="mlbl">Loan amount</div>
+          <div class="fg">
+            <div class="sr"><input type="range" class="sl sl-g" id="r-amt" min="5000" max="200000" step="5000"
+                value="100000" oninput="calcREG()" /><span class="sv" id="r-amt-v">&#8369;100,000</span></div>
+            <div class="fhint">Minimum &#8369;5,000 &middot; Maximum &#8369;200,000 or 3&times; your capital</div>
+          </div>
+          <div class="mlbl">Loan term</div>
+          <div class="fg">
+            <div class="sr"><input type="range" class="sl sl-g" id="r-mo" min="12" max="60" step="12" value="36"
+                oninput="calcREG()" /><span class="sv" id="r-mo-v">36 months</span></div>
+            <div class="fhint">12 months (1 year) to 60 months (5 years)</div>
+          </div>
+          <div class="est est-g">
+            <div class="ett ett-g">Payment estimate &mdash; diminishing interest</div>
+            <div class="eg">
+              <div class="ei">
+                <div class="eil">Monthly principal</div>
+                <div class="eiv eiv-g" id="r-prin">&#8369;2,778</div>
+              </div>
+              <div class="ei">
+                <div class="eil">1st mo. interest</div>
+                <div class="eiv eiv-g" id="r-int">&#8369;1,000</div>
+              </div>
+              <div class="ei">
+                <div class="eil">1st mo. total</div>
+                <div class="eiv eiv-g" id="r-tot">&#8369;3,778</div>
+              </div>
+            </div>
+            <div class="enote" style="color:#3B6D11;">&#8595; Interest decreases every month as your balance goes down
+            </div>
+          </div>
+          <div class="ded-preview" id="reg-ded-preview" style="margin-top:14px;background:#F8F7F5;border:1px solid #E0DDD6;border-radius:10px;padding:16px;font-size:12px;">
+            <div style="font-size:13px;font-weight:700;color:#1C2B3A;margin-bottom:10px;">&#128203; Certification Past Dues / Deductions</div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #E8E5DF;"><span style="color:#888;">Amount Applied (A)</span><span style="font-weight:700;" id="reg-ded-amt">&#8369;0</span></div>
+            <div style="font-size:11px;font-weight:600;color:#854F0B;text-transform:uppercase;margin:10px 0 4px;">Past Dues (B)</div>
+            <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Short Term Loan</span><span id="reg-ded-past-stl">&#8369;0</span></div>
+            <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Commodity</span><span id="reg-ded-past-com">&#8369;0</span></div>
+            <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Canteen Credit</span><span id="reg-ded-past-canteen">&#8369;0</span></div>
+            <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Ticket/Load</span><span id="reg-ded-past-ticket">&#8369;0</span></div>
+            <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Others</span><span id="reg-ded-past-others">&#8369;0</span></div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid #E8E5DF;font-weight:600;"><span>Total (B)</span><span id="reg-ded-totalb">&#8369;0</span></div>
+            <div style="font-size:11px;font-weight:600;color:#185FA5;text-transform:uppercase;margin:10px 0 4px;">Deductions (C)</div>
+            <div style="display:flex;justify-content:space-between;padding:4px 0;"><span id="reg-ded-cbu-label">Capital Build-Up (2%)</span><span id="reg-ded-cbu">&#8369;0</span></div>
+            <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Service Fee</span><span id="reg-ded-service">&#8369;0</span></div>
+            <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Insurance</span><span id="reg-ded-insurance">&#8369;0</span></div>
+            <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Notarial Fee</span><span id="reg-ded-notarial">&#8369;0</span></div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid #E8E5DF;font-weight:600;"><span>Total (C)</span><span id="reg-ded-totalc">&#8369;0</span></div>
+            <div style="display:flex;justify-content:space-between;padding:10px 0 0;font-weight:700;font-size:14px;color:#3B6D11;border-top:2px solid #1C2B3A;margin-top:8px;"><span>Net Proceeds (A &minus; (B+C))</span><span id="reg-ded-net">&#8369;0</span></div>
+          </div>
+          <div class="mf"><button class="bcn" onclick="closeM('reg')">Cancel</button><button class="bsub bsub-g"
+              onclick="subREG()">Submit Application</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COMMODITY LOAN MODAL -->
+  <div class="ov" id="ov-com" onclick="if(event.target===this)closeM('com')">
+    <div class="modal">
+      <div class="mh">
+        <div class="mt">&#128722; Commodity Loan Application</div><span class="mx" onclick="closeM('com')">&times;</span>
+      </div>
+      <div class="mb">
+        <div class="sbox" id="com-ok" style="display:none;">
+          <div class="sicon">&#9989;</div>
+          <div class="stit">Application submitted!</div>
+          <div class="ssub">Your commodity loan application has been sent to the loan officer for review. You will be
+            notified once it is approved.</div>
+          <button class="sdone" onclick="closeM('com')">Close</button>
+        </div>
+        <div id="com-form">
+          <!-- CBU Info Banner -->
+          <div class="modal-cbu-banner" style="background:linear-gradient(135deg,#F3EBF9,#FAF4FF);border-color:#D9B8F0;">
+            <div class="mcb-icon">&#128176;</div>
+            <div class="mcb-info">
+              <div class="mcb-label" style="color:#6B3B9A;">Your Capital Build-Up (CBU)</div>
+              <div class="mcb-amount" style="color:#4A1A7A;" id="com-modal-cbu">&mdash;</div>
+            </div>
+            <div class="mcb-right">
+              <div class="mcb-max-label">Max Loanable</div>
+              <div class="mcb-max-val" style="color:#6B3B9A;" id="com-modal-max">&mdash;</div>
+            </div>
+          </div>
+          <span class="ltag" style="background:#F3EBF9;color:#6B3B9A;border:1px solid #D9B8F0;">&#128722; Commodity Loan &middot; 1% interest/month</span>
+          <div class="lrule" style="background:#F3EBF9;border-left:3px solid #6B3B9A;color:#6B3B9A;"><strong>Rules:</strong> 1 to 2 months &middot; 1% interest per month &middot; For purchasing goods through the cooperative store &middot; <strong>Max based on your CBU</strong></div>
+          <div class="mlbl">Loan amount</div>
+          <div class="fg">
+            <div class="sr"><input type="range" class="sl" style="accent-color:#6B3B9A;" id="c-amt" min="500" max="5000" step="500"
+                value="3000" oninput="calcCOM()" /><span class="sv" id="c-amt-v">&#8369;3,000</span></div>
+            <div class="fhint">Minimum &#8369;500 &middot; Maximum &#8369;5,000</div>
+          </div>
+          <div class="mlbl">Number of months</div>
+          <div class="fg">
+            <div class="sr"><input type="range" class="sl" style="accent-color:#6B3B9A;" id="c-mo" min="1" max="2" step="1" value="2"
+                oninput="calcCOM()" /><span class="sv" id="c-mo-v">2 months</span></div>
+            <div class="fhint">1 or 2 months only</div>
+          </div>
+          <div class="est" style="background:#F3EBF9;border:1px solid #D9B8F0;">
+            <div class="ett" style="color:#6B3B9A;">Payment estimate</div>
+            <div class="eg">
+              <div class="ei">
+                <div class="eil">Monthly payment</div>
+                <div class="eiv" style="color:#6B3B9A;" id="c-monthly">&#8369;1,530</div>
+              </div>
+              <div class="ei">
+                <div class="eil">Total interest</div>
+                <div class="eiv" style="color:#6B3B9A;" id="c-int">&#8369;60</div>
+              </div>
+              <div class="ei">
+                <div class="eil">Total to pay</div>
+                <div class="eiv" style="color:#6B3B9A;" id="c-total">&#8369;3,060</div>
+              </div>
+            </div>
+          </div>
+          <div class="ded-preview" id="com-ded-preview" style="margin-top:14px;background:#F8F7F5;border:1px solid #E0DDD6;border-radius:10px;padding:16px;font-size:12px;">
+            <div style="font-size:13px;font-weight:700;color:#1C2B3A;margin-bottom:10px;">&#128203; Certification Past Dues / Deductions</div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #E8E5DF;"><span style="color:#888;">Amount Applied (A)</span><span style="font-weight:700;" id="com-ded-amt">&#8369;0</span></div>
+            <div style="font-size:11px;font-weight:600;color:#185FA5;text-transform:uppercase;margin:10px 0 4px;">Deductions (C)</div>
+            <div style="display:flex;justify-content:space-between;padding:4px 0;"><span id="com-ded-cbu-label">Capital Build-Up (1%)</span><span id="com-ded-cbu">&#8369;0</span></div>
+            <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Service Fee</span><span id="com-ded-service">&#8369;0</span></div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid #E8E5DF;font-weight:600;"><span>Total (C)</span><span id="com-ded-totalc">&#8369;0</span></div>
+            <div style="display:flex;justify-content:space-between;padding:10px 0 0;font-weight:700;font-size:14px;color:#3B6D11;border-top:2px solid #1C2B3A;margin-top:8px;"><span>Net Proceeds (A &minus; C)</span><span id="com-ded-net">&#8369;0</span></div>
+          </div>
+          <div class="mf"><button class="bcn" onclick="closeM('com')">Cancel</button><button class="bsub"
+              style="background:#6B3B9A;color:#fff;" onclick="subCOM()">Submit Application</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="pay-overlay" id="pay-overlay" onclick="if(event.target===this)closePayModal()">
+    <div class="pay-modal">
+      <div class="pay-mh">
+        <div class="pay-mt">&#128179; Make a Payment</div>
+        <span class="pay-mx" onclick="closePayModal()">&times;</span>
+      </div>
+      <div class="pay-mb">
+
+        <!-- SUCCESS SCREEN -->
+        <div class="pay-sbox" id="pay-success">
+          <div class="pay-si">&#9989;</div>
+          <div class="pay-st">Payment submitted!</div>
+          <div class="pay-ss" id="pay-success-msg">Your payment has been submitted and is now under review. The admin
+            will confirm or reach out if needed. You'll get an email once it's reviewed.</div>
+          <div class="pay-projection" id="pay-projection" style="display:none;">
+            <div class="pay-proj-title">After-payment overview</div>
+            <div class="pay-proj-row">
+              <span>Amount paid</span>
+              <span class="proj-val" id="proj-amount-paid">&#8369;0</span>
+            </div>
+            <div class="pay-proj-row">
+              <span>Remaining balance</span>
+              <span class="proj-val" id="proj-remaining-bal">&#8369;0</span>
+            </div>
+            <div class="pay-proj-row">
+              <span>Next month due</span>
+              <span class="proj-val" id="proj-next-due">&#8369;0</span>
+            </div>
+            <div class="pay-proj-note" id="pay-proj-note"></div>
+          </div>
+          <button class="pay-sdone" onclick="closePayModal()">Done</button>
+        </div>
+
+        <!-- STEP 1 — Choose payment method & month -->
+        <div id="pay-step1">
+          <div class="step-label">How would you like to pay?</div>
+          <div class="pay-choice-grid">
+            <div class="pay-choice-card" id="choice-counter" onclick="selectPaymentMethod('Counter')">
+              <div class="pcc-icon">&#127970;</div>
+              <div class="pcc-title">Pay at the Counter</div>
+              <div class="pcc-desc">Visit the cooperative office and pay directly. The admin will confirm after you pay.</div>
+              <div class="pcc-tag tag-green">Walk-in</div>
+            </div>
+            <div class="pay-choice-card" id="choice-salary" onclick="selectPaymentMethod('Salary Deduction')">
+              <div class="pcc-icon">&#128176;</div>
+              <div class="pcc-title">Salary Deduction</div>
+              <div class="pcc-desc">Your payment will be deducted from your salary. The admin will process and confirm.</div>
+              <div class="pcc-tag" style="background:#FAEEDA;color:#854F0B;border-color:#FAC775;">Auto-deduct</div>
+            </div>
+          </div>
+
+          <!-- Month picker -->
+          <div style="margin-top:18px;">
+            <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Which month are you paying for?</div>
+            <div style="display:flex;gap:8px;">
+              <button type="button" class="qp-btn qp-active" id="mp-this" onclick="selectPayMonth('this')" style="flex:1;padding:12px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Montserrat',sans-serif;border:1.5px solid #3B6D11;background:#EAF3DE;color:#3B6D11;">&#128197; This Month</button>
+              <button type="button" class="qp-btn" id="mp-next" onclick="selectPayMonth('next')" style="flex:1;padding:12px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Montserrat',sans-serif;border:1.5px solid #E0DDD6;background:#fff;color:#555;">&#128198; Next Month</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 2 — Payment details form -->
+        <div id="pay-step2" style="display:none;">
+          <div class="step-back" onclick="backToMethodChoice()">&larr; Change payment method</div>
+
+          <div class="chosen-method-badge" id="chosen-method-badge"></div>
+
+          <div class="loan-summary-box">
+            <div class="lsb-title">Payment breakdown</div>
+            <div class="lsb-grid">
+              <div class="lsb-item">
+                <div class="lsb-label">Loan type</div>
+                <div class="lsb-val" id="modal-loan-type">&mdash;</div>
+              </div>
+              <div class="lsb-item">
+                <div class="lsb-label">Paying for</div>
+                <div class="lsb-val amber" id="modal-due-date">&mdash;</div>
+              </div>
+              <div class="lsb-item">
+                <div class="lsb-label">Principal</div>
+                <div class="lsb-val" id="modal-principal">&mdash;</div>
+              </div>
+              <div class="lsb-item">
+                <div class="lsb-label">Interest</div>
+                <div class="lsb-val" id="modal-interest">&mdash;</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="amount-due-box">
+            <div class="adb-label">Total amount due</div>
+            <div class="adb-val" id="modal-total-due">&mdash;</div>
+          </div>
+
+          <div class="pay-mlbl">Payment details</div>
+          <div class="fg">
+            <label class="fl">Number of months to pay</label>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+              <button type="button" class="qp-btn" id="pm-1" onclick="setPayMonths(1)" style="flex:1;min-width:50px;">1</button>
+              <button type="button" class="qp-btn" id="pm-2" onclick="setPayMonths(2)" style="flex:1;min-width:50px;">2</button>
+              <button type="button" class="qp-btn" id="pm-3" onclick="setPayMonths(3)" style="flex:1;min-width:50px;">3</button>
+              <button type="button" class="qp-btn" id="pm-4" onclick="setPayMonths(4)" style="flex:1;min-width:50px;">4</button>
+              <button type="button" class="qp-btn" id="pm-5" onclick="setPayMonths(5)" style="flex:1;min-width:50px;">5</button>
+              <input type="number" id="pay-num-months" min="1" value="1"
+                style="width:50px;padding:8px;border:1px solid #D0CCC6;border-radius:8px;text-align:center;font-size:13px;font-family:'Montserrat',sans-serif;"
+                oninput="syncPayMonthsFromInput()" title="Custom months" />
+            </div>
+          </div>
+          <div class="fg">
+            <label class="fl">Amount paid (&#8369;)</label>
+            <input class="fi" id="pay-amount" type="number" placeholder="Enter amount paid"
+              oninput="updatePayConfirm()" />
+            <div class="fhint" id="pay-amount-hint">Full amount due: &mdash;</div>
+            <div class="quick-pay-row">
+              <span class="qp-label">Quick pay:</span>
+              <button type="button" class="qp-btn qp-active" id="qp-1mo" onclick="quickPayAmount('1mo')">1 month</button>
+              <button type="button" class="qp-btn" id="qp-2mo" onclick="quickPayAmount('2mo')">2 months</button>
+              <button type="button" class="qp-btn qp-full" id="qp-full" onclick="quickPayAmount('full')">Full balance</button>
+            </div>
+          </div>
+          <div class="fg">
+            <label class="fl">Date of payment</label>
+            <input class="fi" id="pay-date" type="date" />
+          </div>
+
+          <div class="fg">
+            <label class="fl">Notes (optional)</label>
+            <input class="fi" id="pay-notes" placeholder="Any additional notes..." />
+          </div>
+
+          <div class="confirm-summary">
+            <div class="cs-title">Payment summary</div>
+            <div class="cs-row"><span>Method</span><span id="cs-method">&mdash;</span></div>
+            <div class="cs-row"><span>Amount paying</span><span id="cs-amt">&mdash;</span></div>
+            <div class="cs-row"><span>Balance after payment</span><span id="cs-bal">&mdash;</span></div>
+            <div class="cs-row"><span>Month being paid</span><span id="cs-month">&mdash;</span></div>
+          </div>
+
+          <div style="background:#FAEEDA;border:1px solid #FAC775;border-radius:10px;padding:12px 16px;margin-bottom:14px;">
+            <div style="font-size:12px;color:#854F0B;line-height:1.6;">&#9888;&#65039; This payment will be sent to the admin for <strong>approval</strong>. You will be notified once confirmed.</div>
+          </div>
+
+          <div class="pay-mf">
+            <button class="pay-bcn" onclick="closePayModal()">Cancel</button>
+            <button class="pay-bsub" onclick="submitPayment()">Submit for Approval</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- SCHEDULE MODAL -->
+  <div class="sched-overlay" id="sched-overlay" onclick="if(event.target===this)closeSchedModal()">
+    <div class="sched-modal">
+      <div class="sched-mh">
+        <div class="sched-mt" id="sched-modal-title">&#128203; Payment Schedule</div>
+        <span class="sched-mx" onclick="closeSchedModal()">&times;</span>
+      </div>
+      <div class="sched-mb">
+        <div class="sched-summary" id="sched-modal-summary"></div>
+        <table class="sched-tbl">
+          <thead>
+            <tr>
+              <th>Month</th>
+              <th>Principal</th>
+              <th>Interest</th>
+              <th>Total Due</th>
+              <th>Balance After</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="sched-modal-body"></tbody>
+        </table>
+        <div class="sched-note" id="sched-modal-note"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Active Loan Restriction Modal -->
+  <div id="loan-block-modal" onclick="if(event.target===this)this.style.display='none'"
+    style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:none;align-items:center;justify-content:center;z-index:999;padding:20px;">
+    <div style="background:#fff;border-radius:16px;width:420px;max-width:92vw;box-shadow:0 12px 48px rgba(0,0,0,0.2);overflow:hidden;">
+      <div style="background:#A32D2D;padding:22px 24px;text-align:center;">
+        <div style="font-size:36px;margin-bottom:6px;">&#9888;&#65039;</div>
+        <div style="font-size:15px;font-weight:700;color:#fff;letter-spacing:0.03em;">Cannot Apply for a New Loan</div>
+      </div>
+      <div style="padding:24px 24px 20px;text-align:center;">
+        <div style="font-size:14px;color:#333;line-height:1.7;margin-bottom:18px;">
+          You currently have an <strong>active unpaid loan</strong>. You must <strong>fully pay</strong> your current loan before applying for a new one.
+        </div>
+        <div style="background:#FEF3F2;border:1px solid #F7C1C1;border-radius:10px;padding:14px 18px;margin-bottom:20px;text-align:left;">
+          <div style="font-size:12px;font-weight:600;color:#A32D2D;margin-bottom:6px;">&#128161; What to do:</div>
+          <div style="font-size:12px;color:#A32D2D;line-height:1.7;">
+            &#8226; Check your payment schedule in <strong>My Payments</strong><br>
+            &#8226; Complete all remaining payments<br>
+            &#8226; Once fully paid, you can apply again
+          </div>
+        </div>
+        <button onclick="document.getElementById('loan-block-modal').style.display='none'"
+          style="width:100%;padding:12px;background:#1C2B3A;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif;">
+          Got it
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Removed deprecated firstlogin modal, now handled by standalone forced setup page -->
+
+  <!-- ── Fullscreen Button ── -->
+  <button id="fs-btn" onclick="toggleFullscreen()" title="Toggle Fullscreen" style="position:fixed;bottom:18px;right:18px;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1C2B3A;color:#fff;border:none;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,0.25);transition:transform 0.15s,background 0.15s;opacity:0.85;">&#x26F6;</button>
+  <script>
+  (function(){
+    function _updateFsIcon(){var b=document.getElementById('fs-btn');if(!b)return;var isFs=!!(document.fullscreenElement||document.webkitFullscreenElement||document.mozFullScreenElement);b.innerHTML=isFs?'&#x2715;':'&#x26F6;';b.title=isFs?'Exit Fullscreen':'Enter Fullscreen';b.style.background=isFs?'#A32D2D':'#1C2B3A';}
+    document.addEventListener('fullscreenchange',_updateFsIcon);
+    document.addEventListener('webkitfullscreenchange',_updateFsIcon);
+    document.addEventListener('mozfullscreenchange',_updateFsIcon);
+    var b=document.getElementById('fs-btn');
+    if(b){b.addEventListener('mouseenter',function(){this.style.transform='scale(1.12)';this.style.opacity='1';});b.addEventListener('mouseleave',function(){this.style.transform='scale(1)';this.style.opacity='0.85';});}
+  })();
+  </script>
+
+  <!-- ── Device Detection Script ── -->
+  <script>
+  (function() {
+    var w = window.innerWidth || screen.width;
+    var isMobile = w <= 600 || /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    var badge = document.getElementById('device-badge');
+    var label = document.getElementById('device-label');
+    var infoPanel = document.getElementById('desktop-info-panel');
+    var phoneFrame = document.getElementById('phone-frame-wrap');
+
+    if (isMobile) {
+      // On actual phone: hide the desktop info panel, phone frame is just transparent
+      if (infoPanel) infoPanel.style.display = 'none';
+      if (phoneFrame) {
+        phoneFrame.style.display = 'block';
+        phoneFrame.style.borderRadius = '0';
+        phoneFrame.style.boxShadow = 'none';
+        phoneFrame.style.width = '100%';
+        phoneFrame.style.height = '100vh';
+      }
+      // Also fix gc-app to be 100vh on mobile
+      var gcApp = document.getElementById('gc-app');
+      if (gcApp) {
+        gcApp.style.borderRadius = '0';
+        gcApp.style.height = '100vh';
+        gcApp.style.maxWidth = '100%';
+      }
+      // Update badge for phone (it's hidden via CSS anyway)
+      if (label) label.textContent = 'Phone View';
+      if (badge) badge.querySelector('span').textContent = '📱';
+    } else {
+      // On desktop or tablet: show the phone frame
+      var devType = w >= 1024 ? '🖥️ Desktop View' : '💻 Laptop View';
+      if (label) label.textContent = devType.split(' ').slice(1).join(' ');
+      if (badge && badge.querySelector('span')) badge.querySelector('span').textContent = devType.split(' ')[0];
+    }
+  })();
+  </script>
+
+  <?!= include('member-script') ?>
+</body>
+
+</html>

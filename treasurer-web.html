@@ -1,0 +1,247 @@
+      <div class="topbar">
+        <div>
+          <div class="topbar-title">Loan Releases</div>
+          <div class="topbar-sub">AY 2025-2026 &middot; Release approved loans and manage deductions</div>
+        </div>
+        <div class="topbar-right">
+          <button class="btn-back" onclick="navigate('dashboard')">&larr; Dashboard</button>
+          <button class="btn-primary" onclick="loadReleases()">&#8635; Refresh</button>
+        </div>
+      </div>
+      <div class="content">
+        <div class="cards-row">
+          <div class="card bl1">
+            <div class="card-label">Pending Requests</div>
+            <div class="card-val" id="stat-pending-count">&mdash;</div>
+            <div class="card-sub">Awaiting release</div>
+          </div>
+          <div class="card bl2">
+            <div class="card-label">Total Net Pending</div>
+            <div class="card-val" id="stat-pending-net">&mdash;</div>
+            <div class="card-sub">Net amount pending</div>
+          </div>
+          <div class="card bl3">
+            <div class="card-label">Released Today</div>
+            <div class="card-val" id="stat-released-today">&mdash;</div>
+            <div class="card-sub">Loans released today</div>
+          </div>
+          <div class="card bl4">
+            <div class="card-label">Total Released</div>
+            <div class="card-val" id="stat-total-released">&mdash;</div>
+            <div class="card-sub">All time</div>
+          </div>
+        </div>
+        
+        <div class="section-header">
+          <div class="section-title">Pending Loan Releases</div>
+        </div>
+        
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:40px;"><input type="checkbox" id="select-all-pending" onclick="toggleSelectAllPending()" /></th>
+                <th>Teacher</th>
+                <th>School</th>
+                <th>Purpose</th>
+                <th>Date Requested</th>
+                <th>Gross Amount</th>
+                <th>Total Deductions</th>
+                <th>Net Release</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="pending-tbody">
+              <tr>
+                <td colspan="10">
+                  <div class="empty-state">
+                    <div class="empty-icon">&#128176;</div>
+                    <div class="empty-title">Loading pending loans...</div>
+                    <div class="empty-sub">Fetching pending loan release records.</div>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        
+        <!-- Sticky Action Bar -->
+        <div class="sticky-action-bar" id="sticky-action-bar" style="display:none;">
+          <div class="action-bar-content">
+            <div class="action-bar-left">
+              <span class="selected-count"><strong id="selected-count">0</strong> selected</span>
+              <span class="selected-total">Total Net: <strong id="selected-total">&#8369;0</strong></span>
+            </div>
+            <div class="action-bar-right">
+              <button class="btn-secondary" onclick="clearSelection()">Clear Selection</button>
+              <button class="btn-primary" onclick="batchRelease()">Release Selected</button>
+            </div>
+          </div>
+        </div>
+        
+        <div class="section-header" style="margin-top:32px;">
+          <div class="section-title">Recently Released Loans</div>
+        </div>
+        
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Teacher</th>
+                <th>School</th>
+                <th>Purpose</th>
+                <th>Gross Amount</th>
+                <th>Total Deductions</th>
+                <th>Net Released</th>
+                <th>Date Released</th>
+                <th>Released By</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="released-tbody">
+              <tr>
+                <td colspan="9">
+                  <div class="empty-state">
+                    <div class="empty-icon">&#128176;</div>
+                    <div class="empty-title">No released loans yet</div>
+                    <div class="empty-sub">Released loans will appear here.</div>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+  <!-- Release Confirm Modal -->
+  <div class="modal-overlay" id="release-ov" style="display:none" onclick="if(event.target===this)closeReleaseOv()">
+    <div style="background:#fff;border-radius:14px;width:92%;max-width:500px;box-shadow:0 8px 40px rgba(0,0,0,0.18);overflow:hidden;">
+      <div style="background:#1C2B3A;padding:18px 22px;display:flex;align-items:center;gap:10px;">
+        <span style="font-size:20px;">&#128666;</span>
+        <div>
+          <div style="color:#fff;font-size:15px;font-weight:600;">Release Loan</div>
+          <div style="color:rgba(255,255,255,0.45);font-size:11px;" id="release-loan-name"></div>
+        </div>
+      </div>
+      <div style="padding:22px;">
+        <div style="font-size:13px;color:#555;margin-bottom:18px;line-height:1.6;">
+          Are you sure you want to release this loan? Configure deductions below before confirming.
+        </div>
+        
+        <!-- Deduction Fields -->
+        <div style="background:#F8F6F4;padding:16px;border-radius:8px;margin-bottom:18px;">
+          <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px;">Deductions</div>
+          
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+            <div>
+              <label style="font-size:11px;color:#666;display:block;margin-bottom:4px;">Past Due (ST)</label>
+              <input type="number" id="ded-past-st" style="width:100%;padding:8px;border:0.5px solid #E0DDD6;border-radius:6px;font-size:13px;" placeholder="0" />
+            </div>
+            <div>
+              <label style="font-size:11px;color:#666;display:block;margin-bottom:4px;">Past Due (Commodity)</label>
+              <input type="number" id="ded-past-com" style="width:100%;padding:8px;border:0.5px solid #E0DDD6;border-radius:6px;font-size:13px;" placeholder="0" />
+            </div>
+          </div>
+          
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+            <div>
+              <label style="font-size:11px;color:#666;display:block;margin-bottom:4px;">Canteen</label>
+              <input type="number" id="ded-canteen" style="width:100%;padding:8px;border:0.5px solid #E0DDD6;border-radius:6px;font-size:13px;" placeholder="0" />
+            </div>
+            <div>
+              <label style="font-size:11px;color:#666;display:block;margin-bottom:4px;">Ticket</label>
+              <input type="number" id="ded-ticket" style="width:100%;padding:8px;border:0.5px solid #E0DDD6;border-radius:6px;font-size:13px;" placeholder="0" />
+            </div>
+          </div>
+          
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+            <div>
+              <label style="font-size:11px;color:#666;display:block;margin-bottom:4px;">Others</label>
+              <input type="number" id="ded-others" style="width:100%;padding:8px;border:0.5px solid #E0DDD6;border-radius:6px;font-size:13px;" placeholder="0" />
+            </div>
+            <div>
+              <label style="font-size:11px;color:#666;display:block;margin-bottom:4px;">Regular Loan</label>
+              <input type="number" id="ded-reg" style="width:100%;padding:8px;border:0.5px solid #E0DDD6;border-radius:6px;font-size:13px;" placeholder="0" />
+            </div>
+          </div>
+          
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+            <div>
+              <label style="font-size:11px;color:#666;display:block;margin-bottom:4px;">CBU</label>
+              <input type="number" id="ded-cbu" style="width:100%;padding:8px;border:0.5px solid #E0DDD6;border-radius:6px;font-size:13px;" placeholder="0" />
+            </div>
+            <div>
+              <label style="font-size:11px;color:#666;display:block;margin-bottom:4px;">Service Fee</label>
+              <input type="number" id="ded-service" style="width:100%;padding:8px;border:0.5px solid #E0DDD6;border-radius:6px;font-size:13px;" placeholder="0" />
+            </div>
+          </div>
+          
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div>
+              <label style="font-size:11px;color:#666;display:block;margin-bottom:4px;">Insurance <span style="color:#185FA5;font-weight:700;">(auto % of loan)</span></label>
+              <input type="number" id="ded-insurance" style="width:100%;padding:8px;border:0.5px solid #E0DDD6;border-radius:6px;font-size:13px;" placeholder="0 (auto-filled)" />
+            </div>
+            <div>
+              <label style="font-size:11px;color:#666;display:block;margin-bottom:4px;">Notarial</label>
+              <input type="number" id="ded-notarial" style="width:100%;padding:8px;border:0.5px solid #E0DDD6;border-radius:6px;font-size:13px;" placeholder="0" />
+            </div>
+          </div>
+        </div>
+        
+        <!-- Summary -->
+        <div style="background:#E8F4FD;padding:12px;border-radius:8px;margin-bottom:18px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+            <span style="font-size:12px;color:#555;">Total Deductions:</span>
+            <span style="font-size:12px;font-weight:600;color:#1C2B3A;" id="summary-deductions">&#8369;0</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;">
+            <span style="font-size:12px;color:#555;">Net Proceeds:</span>
+            <span style="font-size:13px;font-weight:700;color:#3B6D11;" id="summary-net">&#8369;0</span>
+          </div>
+        </div>
+        
+        <!-- Claiming Date -->
+        <div style="background:#FFF9E6;padding:12px;border-radius:8px;margin-bottom:18px;border:0.5px solid #F5C842;">
+          <div style="font-size:12px;font-weight:600;color:#7A5500;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">&#128197; Claiming Schedule</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div>
+              <label style="font-size:11px;color:#666;display:block;margin-bottom:4px;">Claiming Date</label>
+              <input type="date" id="claiming-date" style="width:100%;padding:8px;border:0.5px solid #E0DDD6;border-radius:6px;font-size:13px;" />
+            </div>
+            <div>
+              <label style="font-size:11px;color:#666;display:block;margin-bottom:4px;">Claiming Time</label>
+              <input type="text" id="claiming-time" value="8:00 AM - 5:00 PM" style="width:100%;padding:8px;border:0.5px solid #E0DDD6;border-radius:6px;font-size:13px;" />
+            </div>
+          </div>
+          <div style="margin-top:8px;">
+            <label style="font-size:11px;color:#666;display:block;margin-bottom:4px;">Location</label>
+            <input type="text" id="claiming-location" value="CampusCoop Office, SKSU" style="width:100%;padding:8px;border:0.5px solid #E0DDD6;border-radius:6px;font-size:13px;" />
+          </div>
+        </div>
+        
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+          <button onclick="closeReleaseOv()" style="padding:9px 20px;background:#F4F2EE;border:0.5px solid #E0DDD6;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;font-family:Montserrat,sans-serif;color:#666;">Cancel</button>
+          <button onclick="confirmRelease()" style="padding:9px 20px;background:#3B6D11;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:Montserrat,sans-serif;">&#128666; Release Loan</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loan Ledger Modal -->
+  <div class="modal-overlay" id="ledger-ov" style="display:none" onclick="if(event.target===this)closeLedgerOv()">
+    <div style="background:#fff;border-radius:14px;width:94%;max-width:700px;box-shadow:0 8px 40px rgba(0,0,0,0.18);overflow:hidden;max-height:90vh;display:flex;flex-direction:column;">
+      <div style="background:#1C2B3A;padding:18px 22px;display:flex;align-items:center;gap:10px;flex-shrink:0;">
+        <span style="font-size:20px;">&#128196;</span>
+        <div>
+          <div style="color:#fff;font-size:15px;font-weight:600;">Loan Ledger</div>
+          <div style="color:rgba(255,255,255,0.45);font-size:11px;" id="ledger-loan-name"></div>
+        </div>
+        <span onclick="closeLedgerOv()" style="margin-left:auto;color:rgba(255,255,255,0.6);cursor:pointer;font-size:22px;">&times;</span>
+      </div>
+      <div style="padding:22px;overflow-y:auto;flex:1;">
+        <div id="ledger-content"></div>
+      </div>
+    </div>
+  </div>

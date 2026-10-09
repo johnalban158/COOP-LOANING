@@ -1,0 +1,152 @@
+<script>
+var _otpVerified = false;
+var _otpPhone = '';
+
+/* ── Member Type ── */
+function selType(t) {
+  var rt = document.getElementById('reg-type');
+  if (rt) rt.value = t;
+  var pt  = document.getElementById('pill-t');
+  var pjo = document.getElementById('pill-jo');
+  if (pt)  pt.className  = 'type-pill' + (t === 'Teacher'   ? ' sel-t'  : '');
+  if (pjo) pjo.className = 'type-pill' + (t === 'Job Order' ? ' sel-jo' : '');
+}
+
+/* ── OTP: Send ── */
+function sendOtpCode() {
+  var phone = (document.getElementById('r-phone').value || '').trim();
+  var btn   = document.getElementById('otp-send-btn');
+  var err   = document.getElementById('apply-err');
+  if (err) err.style.display = 'none';
+
+  if (!phone || phone.length < 10) {
+    if (err) { err.textContent = 'Please enter a valid phone number.'; err.style.display = 'block'; }
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
+
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r && r.success) {
+        _otpPhone    = phone;
+        _otpVerified = false;
+        var sec = document.getElementById('otp-section');
+        if (sec) sec.style.display = 'block';
+        var msg = document.getElementById('otp-msg');
+        if (msg) { msg.textContent = 'Code sent to ' + phone + '. Check your SMS.'; msg.style.color = '#3B6D11'; msg.style.display = 'block'; }
+        var countdown = 60;
+        var timer = setInterval(function() {
+          countdown--;
+          if (btn) btn.textContent = 'Resend (' + countdown + 's)';
+          if (countdown <= 0) { clearInterval(timer); if (btn) { btn.disabled = false; btn.textContent = 'Resend Code'; } }
+        }, 1000);
+      } else {
+        if (err) { err.textContent = (r && r.message) || 'Failed to send verification code.'; err.style.display = 'block'; }
+        if (btn) { btn.disabled = false; btn.textContent = 'Send Code'; }
+      }
+    })
+    .withFailureHandler(function(e) {
+      if (err) { err.textContent = 'Error: ' + e.message; err.style.display = 'block'; }
+      if (btn) { btn.disabled = false; btn.textContent = 'Send Code'; }
+    })
+    .sendRegistrationOtp(phone);
+}
+
+/* ── OTP: Verify ── */
+function verifyOtpCode() {
+  var code  = (document.getElementById('otp-code').value  || '').trim();
+  var phone = (document.getElementById('r-phone').value   || '').trim();
+  var btn   = document.getElementById('otp-verify-btn');
+  var msg   = document.getElementById('otp-msg');
+
+  if (!code || code.length < 4) {
+    if (msg) { msg.textContent = 'Please enter the code from your SMS.'; msg.style.color = '#A32D2D'; msg.style.display = 'block'; }
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.textContent = 'Verifying...'; }
+
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r && r.success) {
+        _otpVerified = true;
+        _otpPhone    = phone;
+        var sec     = document.getElementById('otp-section');
+        var badge   = document.getElementById('otp-verified-badge');
+        var sendBtn = document.getElementById('otp-send-btn');
+        var phoneEl = document.getElementById('r-phone');
+        if (sec)     sec.style.display  = 'none';
+        if (badge)   badge.style.display = 'block';
+        if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = '✓ Verified'; sendBtn.style.background = '#3B6D11'; }
+        if (phoneEl) { phoneEl.readOnly = true; phoneEl.style.background = '#EAF3DE'; }
+      } else {
+        if (msg) { msg.textContent = (r && r.message) || 'Invalid code. Try again.'; msg.style.color = '#A32D2D'; msg.style.display = 'block'; }
+        if (btn) { btn.disabled = false; btn.textContent = 'Verify'; }
+      }
+    })
+    .withFailureHandler(function(e) {
+      if (msg) { msg.textContent = 'Error: ' + e.message; msg.style.color = '#A32D2D'; msg.style.display = 'block'; }
+      if (btn) { btn.disabled = false; btn.textContent = 'Verify'; }
+    })
+    .verifyRegistrationOtp(phone, code);
+}
+
+/* ── Submit Application ── */
+function doSubmitApplication() {
+  var last   = (document.getElementById('r-last').value   || '').trim();
+  var first  = (document.getElementById('r-first').value  || '').trim();
+  var mid    = (document.getElementById('r-mid').value    || '').trim();
+  var suffix = (document.getElementById('r-suffix').value || '').trim();
+  var dept   = (document.getElementById('r-dept').value   || '').trim();
+  var email  = (document.getElementById('r-email').value  || '').trim();
+  var phone  = (document.getElementById('r-phone').value  || '').trim();
+  var type   = document.getElementById('reg-type').value;
+  var err    = document.getElementById('apply-err');
+  var btn    = document.getElementById('apply-btn');
+
+  if (err) err.style.display = 'none';
+
+  if (!last || !first || !email || !phone) {
+    if (err) { err.textContent = 'Please fill in all required fields.'; err.style.display = 'block'; }
+    return;
+  }
+  if (!_otpVerified || _otpPhone !== phone) {
+    if (err) { err.textContent = 'Please verify your phone number first.'; err.style.display = 'block'; }
+    return;
+  }
+
+  var emailRx = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRx.test(email)) {
+    if (err) { err.textContent = 'Please enter a valid email address.'; err.style.display = 'block'; }
+    return;
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Submitting...'; }
+
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r && r.success) {
+        var formState    = document.getElementById('form-state');
+        var successState = document.getElementById('success-state');
+        if (formState)    formState.style.display    = 'none';
+        if (successState) successState.style.display = 'block';
+      } else {
+        if (err) { err.textContent = (r && r.message) || 'Failed to submit application.'; err.style.display = 'block'; }
+        if (btn) { btn.disabled = false; btn.textContent = '✓ Submit Application'; }
+      }
+    })
+    .withFailureHandler(function(e) {
+      if (err) { err.textContent = 'Error: ' + e.message; err.style.display = 'block'; }
+      if (btn) { btn.disabled = false; btn.textContent = '✓ Submit Application'; }
+    })
+    .submitMemberApplication({
+      firstName:  first,
+      lastName:   last,
+      middleName: mid,
+      suffix:     suffix,
+      memberType: type,
+      department: dept,
+      email:      email,
+      phone:      phone
+    });
+}
+</script>

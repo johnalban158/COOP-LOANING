@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <script>window.SCRIPT_URL='<?= scriptUrl ?>'; window.CURRENT_PAGE='deductions';</script>
+    <?!= include('deductions-style') ?>
+    <style>.page{display:none;flex:1;flex-direction:column;overflow:hidden;}.page.active{display:flex;}</style>
+  </head>
+  <body>
+    <div class="shell">
+      <?!= include('sidebar') ?>
+      <?!= include('sidedbar-script') ?>
+      <div class="page active" id="page-deductions" style="flex:1;flex-direction:column;overflow:hidden;">
+      <div class="main">
+        <div class="topbar">
+          <div>
+            <div class="topbar-title">Deductions</div>
+            <div class="topbar-sub">AY 2025-2026 &middot; Loan deduction settings and fees</div>
+          </div>
+          <div class="topbar-right">
+            <button class="btn-back" onclick="navigate('dashboard')">&larr; Dashboard</button>
+          </div>
+        </div>
+        <div class="content">
+          <div class="info-banner">
+            <div class="info-icon">&#128203;</div>
+            <div>
+              <div class="info-title">Loan Deduction Settings</div>
+              <div class="info-text">Set default deduction amounts that auto-fill when reviewing loan applications. Members will also see these as a deduction preview when applying.</div>
+            </div>
+          </div>
+          
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:14px;">
+            <!-- REGULAR -->
+            <div id="pded-reg-panel" style="background:#EAF3DE;border-radius:10px;padding:16px;border:1px solid #C0DD97;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                <div style="font-size:12px;font-weight:700;color:#3B6D11;text-transform:uppercase;letter-spacing:0.05em;">&#127970; Regular Loan</div>
+                <label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;">
+                  <input type="checkbox" id="pded-reg-on" checked onchange="togglePageDedPanel('reg')" style="opacity:0;width:0;height:0;"/>
+                  <span style="position:absolute;top:0;left:0;right:0;bottom:0;background:#C0DD97;border-radius:24px;transition:.3s;"></span>
+                  <span id="pded-reg-dot" style="position:absolute;top:2px;left:22px;width:20px;height:20px;background:#fff;border-radius:50%;transition:.3s;box-shadow:0 1px 3px rgba(0,0,0,.2);"></span>
+                </label>
+              </div>
+              <div class="fg" style="margin-bottom:8px;">
+                <label class="fl">Capital Build-Up Rate (%)</label>
+                <input class="fi fi-text" id="pded-reg-cbu" type="number" min="0" max="100" placeholder="2" style="width:80px;font-weight:700;font-family:monospace;"/>
+              </div>
+              <div class="fg" style="margin-bottom:8px;">
+                <label class="fl">Service Fee (&#8369;)</label>
+                <input class="fi fi-text" id="pded-reg-service" type="number" min="0" placeholder="0" style="width:110px;font-weight:700;font-family:monospace;"/>
+              </div>
+              <div class="fg" style="margin-bottom:8px;">
+                <label class="fl">Insurance Rate (% of loan)</label>
+                <input class="fi fi-text" id="pded-reg-insurance" type="number" min="0" step="0.01" placeholder="1.62" style="width:110px;font-weight:700;font-family:monospace;"/>
+              </div>
+              <div class="fg">
+                <label class="fl">Notarial Fee (&#8369;)</label>
+                <input class="fi fi-text" id="pded-reg-notarial" type="number" min="0" placeholder="0" style="width:110px;font-weight:700;font-family:monospace;"/>
+              </div>
+            </div>
+            <!-- SHORT TERM -->
+            <div id="pded-stl-panel" style="background:#E6F1FB;border-radius:10px;padding:16px;border:1px solid #B5D4F4;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                <div style="font-size:12px;font-weight:700;color:#185FA5;text-transform:uppercase;letter-spacing:0.05em;">&#9889; Short Term Loan</div>
+                <label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;">
+                  <input type="checkbox" id="pded-stl-on" checked onchange="togglePageDedPanel('stl')" style="opacity:0;width:0;height:0;"/>
+                  <span style="position:absolute;top:0;left:0;right:0;bottom:0;background:#B5D4F4;border-radius:24px;transition:.3s;"></span>
+                  <span id="pded-stl-dot" style="position:absolute;top:2px;left:22px;width:20px;height:20px;background:#fff;border-radius:50%;transition:.3s;box-shadow:0 1px 3px rgba(0,0,0,.2);"></span>
+                </label>
+              </div>
+              <div class="fg" style="margin-bottom:8px;">
+                <label class="fl">Capital Build-Up Rate (%)</label>
+                <input class="fi fi-text" id="pded-stl-cbu" type="number" min="0" max="100" placeholder="1" style="width:80px;font-weight:700;font-family:monospace;"/>
+              </div>
+              <div class="fg" style="margin-bottom:8px;">
+                <label class="fl">Service Fee (&#8369;)</label>
+                <input class="fi fi-text" id="pded-stl-service" type="number" min="0" placeholder="0" style="width:110px;font-weight:700;font-family:monospace;"/>
+              </div>
+              <div class="fg">
+                <label class="fl">Insurance Rate (% of loan)</label>
+                <input class="fi fi-text" id="pded-stl-insurance" type="number" min="0" step="0.01" placeholder="1.62" style="width:110px;font-weight:700;font-family:monospace;"/>
+              </div>
+            </div>
+            <!-- COMMODITY -->
+            <div id="pded-com-panel" style="background:#F3EBF9;border-radius:10px;padding:16px;border:1px solid #D9B8F0;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                <div style="font-size:12px;font-weight:700;color:#6B3B9A;text-transform:uppercase;letter-spacing:0.05em;">&#128722; Commodity Loan</div>
+                <label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;">
+                  <input type="checkbox" id="pded-com-on" checked onchange="togglePageDedPanel('com')" style="opacity:0;width:0;height:0;"/>
+                  <span style="position:absolute;top:0;left:0;right:0;bottom:0;background:#D9B8F0;border-radius:24px;transition:.3s;"></span>
+                  <span id="pded-com-dot" style="position:absolute;top:2px;left:22px;width:20px;height:20px;background:#fff;border-radius:50%;transition:.3s;box-shadow:0 1px 3px rgba(0,0,0,.2);"></span>
+                </label>
+              </div>
+              <div class="fg" style="margin-bottom:8px;">
+                <label class="fl">Capital Build-Up Rate (%)</label>
+                <input class="fi fi-text" id="pded-com-cbu" type="number" min="0" max="100" placeholder="1" style="width:80px;font-weight:700;font-family:monospace;"/>
+              </div>
+              <div class="fg">
+                <label class="fl">Service Fee (&#8369;)</label>
+                <input class="fi fi-text" id="pded-com-service" type="number" min="0" placeholder="0" style="width:110px;font-weight:700;font-family:monospace;"/>
+              </div>
+            </div>
+          </div>
+          
+          <div style="display:flex;align-items:center;gap:12px;margin-top:18px;">
+            <button class="btn-prim" onclick="savePageDeductionSettings()">Save Deduction Settings</button>
+            <span id="pded-save-ok" style="display:none;font-size:13px;font-weight:600;color:#3B6D11;">&#10003; Saved!</span>
+          </div>
+          
+          <div class="panel" style="margin-top:24px;">
+            <div class="panel-title">CBU Percentage Settings</div>
+            <div class="panel-desc">Set the maximum loanable amount as a percentage of member's Capital Build-Up (CBU).</div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:14px;">
+              <div class="fg">
+                <label class="fl">Regular Loan CBU %</label>
+                <input class="fi fi-text" id="ded-cbu-reg-pct" type="number" min="0" max="500" placeholder="300" style="width:100px;font-weight:700;font-family:monospace;"/>
+                <div class="fhint">e.g., 300% = 3x CBU</div>
+              </div>
+              <div class="fg">
+                <label class="fl">Short Term CBU %</label>
+                <input class="fi fi-text" id="ded-cbu-st-pct" type="number" min="0" max="500" placeholder="80" style="width:100px;font-weight:700;font-family:monospace;"/>
+                <div class="fhint">e.g., 80% = 0.8x CBU</div>
+              </div>
+              <div class="fg">
+                <label class="fl">Commodity CBU %</label>
+                <input class="fi fi-text" id="ded-cbu-com-pct" type="number" min="0" max="500" placeholder="80" style="width:100px;font-weight:700;font-family:monospace;"/>
+                <div class="fhint">e.g., 80% = 0.8x CBU</div>
+              </div>
+            </div>
+            <button class="btn-prim" style="margin-top:12px;" onclick="saveCbuPctSettings()">Save CBU Percentages</button>
+            <span id="cbu-pct-save-ok" style="display:none;margin-left:12px;font-size:13px;font-weight:600;color:#3B6D11;">&#10003; Saved!</span>
+          </div>
+        </div>
+      </div>
+      </div>
+    </div>
+  </body>
+</html>
