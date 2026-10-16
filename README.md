@@ -66,4 +66,9 @@ https://docs.google.com/spreadsheets/d/1RVUDl7EJ3Va7sV76aFj5WkbVIXDKoIt8/edit?us
  this is the example / data that the prof wants to show, even though its not that necessary
 
 
+Google Appcsript Link  
+https://script.google.com/d/1apLDdifoUe-X4oEcV_lnCYDlPFaa7sLW_U2CxaPWnAojE21k2bOsIckg/edit?usp=sharing
+once you click this link you will just as for permission to access my link/ own page but ive put  it as editor on the shared link so you wont do so anyways goodluck on the edit  :2 
+
+
 
