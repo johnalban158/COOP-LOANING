@@ -59,3 +59,11 @@ The admin connects the spreadsheet once in Settings by pasting the Sheet URL. Th
 * Commodity: up to **80% of CBU**, max ₱5,000
 
 On approval, the loan amount is deducted from the member's CBU. Past dues and fees (Capital Build-up, Service Fee, Insurance, Notarial) are deducted from the loan to compute **Net Proceeds = Amount − (Past Dues + Deductions)**, which is what the member receives.
+
+
+Link of the google sheet regular loans
+https://docs.google.com/spreadsheets/d/1RVUDl7EJ3Va7sV76aFj5WkbVIXDKoIt8/edit?usp=sharing&ouid=115148236032753555241&rtpof=true&sd=true
+ this is the example / data that the prof wants to show, even though its not that necessary
+
+
+
