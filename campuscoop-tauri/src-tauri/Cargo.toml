@@ -1,0 +1,25 @@
+[package]
+name = "campuscoop-backend"
+version = "1.0.0"
+description = "CampusCoop Tauri Backend - Nemotron 3.5 Super VL Powered"
+edition = "2021"
+
+[dependencies]
+tauri = { version = "2" }
+tauri-plugin-sql = { version = "2", features = ["sqlite"] }
+tauri-plugin-log = { version = "2", features = ["colored"] }
+tauri-plugin-notification = { version = "2" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+fastrand = "2"
+chrono = { version = "0.4", features = ["serde"] }
+reqwest = { version = "0.11", features = ["json"] }
+tokio = { version = "1", features = ["full"] }
+dotenv = "0.15"
+
+[build-dependencies]
+
+[profile.release]
+opt-level = 3
+lto = true

@@ -1,0 +1,83 @@
+{
+  "$schema": "https://schemas.tauri.dev/config/2",
+  "productName": "CampusCoop",
+  "version": "1.0.0",
+  "identifier": "edu.sksu.campuscoop",
+  "build": {
+    "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "npm run dev",
+    "devPath": "http://localhost:5173",
+    "distDir": "../gen"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "CampusCoop - Cooperative Loan System",
+        "width": 1200,
+        "height": 800,
+        "resizable": true,
+        "fullscreen": false,
+        "minWidth": 900,
+        "minHeight": 600
+      }
+    ],
+    "security": {
+        "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": [],
+    "externalBin": [],
+    "copyright": "© 2026 CampusCoop · Sultan Kudarat State University",
+    "category": "Education",
+    "shortDescription": "Cooperative Loan Management System",
+    "longDescription": "CampusCoop - A desktop cooperative loan management system migrated from Google Apps Script. Features loan applications, payments, member management, and AI-powered assistance using Nemotron 3.5 Super VL (backend) and Deepseek (frontend).",
+    "debounceFormattedDurationMs": 1000,
+    "macOS": {
+      "entitlements": null,
+      "exceptionDomains": [],
+      "signingIdentity": null,
+      "providerShortName": null,
+      "requirements": null
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
+    },
+    "linux": {
+      "deb": {
+        "depends": []
+      },
+      "appimage": {
+        "appid": "edu.sksu.campuscoop"
+      }
+    }
+  },
+  "plugins": {
+    "sql": {
+      "dbpath": "sqlite:campuscoop.db",
+      "allowlist": ["query", "execute", "select", "insert", "update", "delete", "create", "drop"]
+    },
+    "log": {
+      "level": "debug",
+      "levels": [
+        "error",
+        "warn",
+        "info",
+        "debug",
+        "trace"
+      ]
+    },
+    "notification": {}
+  }
+}
