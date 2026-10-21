@@ -1,10 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   getMemberDashboardData,
   getCbuHistory,
-  recordPayment,
-  getMemberPayments,
 } from '../lib/tauri';
 import {
   CreditCard,
@@ -12,15 +9,12 @@ import {
   DollarSign,
   Clock,
   RefreshCw,
-  AlertTriangle,
-  CheckCircle2,
   User,
 } from 'lucide-react';
 import { formatPeso, loanTypeLabel, normLoanType, formatDate } from '../lib/utils';
 import type { Member, Payment, Loan } from '../types';
 
 export default function MemberHome() {
-  const navigate = useNavigate();
   const userRaw = localStorage.getItem('cc_user');
   const user: Member | null = userRaw ? JSON.parse(userRaw) : null;
   const memberId = user?.username || '';
@@ -58,7 +52,7 @@ export default function MemberHome() {
     }
   };
 
-  const handleRecordPayment = async (e: React.FormEvent) => {
+  const handleRecordPayment = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const loanType = formData.get('loanType') as string;

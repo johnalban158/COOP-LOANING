@@ -5,7 +5,7 @@ import ProfileSetup from './pages/ProfileSetup';
 import OfficerSetup from './pages/OfficerSetup';
 import ResetPassword from './pages/ResetPassword';
 
-const publicRouter = createBrowserRouter([
+const router = createBrowserRouter([
   {
     path: '/',
     element: <LoginPage />,
@@ -26,9 +26,6 @@ const publicRouter = createBrowserRouter([
     path: '/reset-password',
     element: <ResetPassword />,
   },
-]);
-
-const protectedRouter = createBrowserRouter([
   {
     path: '/app',
     element: <Layout />,
@@ -49,5 +46,5 @@ const protectedRouter = createBrowserRouter([
 ]);
 
 export default function App() {
-  return <RouterProvider router={publicRouter} />;
+  return <RouterProvider router={router} />;
 }

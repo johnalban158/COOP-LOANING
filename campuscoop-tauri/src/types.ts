@@ -187,3 +187,137 @@ export interface AuthUser {
   role?: string;
   is_profile_complete?: boolean;
 }
+
+// ─── Input Types (for Tauri commands) ──────────────────────────────────
+
+export interface LoginInput {
+  username: string;
+  password: string;
+}
+
+export interface LoginOfficerInput {
+  username: string;
+  password: string;
+  role: string;
+}
+
+export interface CreateMemberInput {
+  phone: string;
+  password?: string;
+  email: string;
+  member_type: string;
+  first_name: string;
+  last_name: string;
+  department?: string;
+  capital?: number;
+}
+
+export interface SubmitLoanApplicationInput {
+  member_id: string;
+  first_name: string;
+  last_name: string;
+  loan_type: string;
+  amount: number;
+  term: number;
+  member_email?: string;
+}
+
+export interface ConfirmPaymentInput {
+  row: number;
+  amount: number;
+  member_id: string;
+  loan_type: string;
+  member_email?: string;
+  member_name?: string;
+}
+
+export interface RecordPaymentInput {
+  member_id: string;
+  member_name: string;
+  member_email: string;
+  loan_type: string;
+  month_num: number;
+  amount: number;
+  method: string;
+  reference?: string;
+  date?: string;
+  notes?: string;
+  proof_base64?: string;
+}
+
+export interface RecordPaymentByAdminInput {
+  member_id: string;
+  member_name: string;
+  member_email?: string;
+  loan_type: string;
+  month_num: number;
+  amount: number;
+  method: string;
+  reference?: string;
+  date_paid?: string;
+  notes?: string;
+  loan_id?: string;
+}
+
+export interface ReviewRejectPaymentInput {
+  row: number;
+  reject_reason?: string;
+}
+
+export interface NemotronChatInput {
+  message: string;
+  system_prompt?: string;
+  image_url?: string;
+}
+
+export interface NemotronLoanRecommendationInput {
+  member_capital: number;
+  member_type: string;
+  existing_loans: Loan[];
+  requested_amount: number;
+  loan_type: string;
+  term: number;
+}
+
+export interface SaveSettingsInput {
+  school_year?: string;
+  admin_password?: string;
+}
+
+export interface AddLoanDirectInput {
+  loan_type: string;
+  member_id: string;
+  member_name: string;
+  amount: number;
+  monthly?: number;
+  term: number;
+  date_released?: string;
+  months_paid?: number;
+  status?: string;
+  school_year?: string;
+  past_dues?: number;
+  deductions?: number;
+  net_proceeds?: number;
+  total_to_pay?: number;
+  balance?: number;
+}
+
+export interface AddMigrationLoanInput {
+  loan_type: string;
+  member_id: string;
+  member_name: string;
+  amount: number;
+  term: number;
+  months_paid?: number;
+  date_released?: string;
+  status?: string;
+}
+
+export interface AddDeductionInput {
+  member_id: string;
+  name: string;
+  type: string;
+  value: number;
+  applies_to: string;
+  amount: number;
+}

@@ -1,26 +1,17 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   FileText,
   CreditCard,
   Users,
-  ShieldAlert,
   Package,
-  CheckCircle2,
-  XCircle,
   Clock,
-  RefreshCw,
-  Search,
   Plus,
   Mail,
   AlertTriangle,
   User,
   Settings as SettingsIcon,
-  Build,
   BarChart3,
-  ArrowLeft,
-  LogOut,
 } from 'lucide-react';
 import {
   getLoanApplications,
@@ -34,12 +25,8 @@ import {
   saveSettings,
   getMemberDashboardData,
   getCbuHistory,
-  recordPayment,
-  getMemberPayments,
-  nemotronChat,
-  nemotronLoanRecommendation,
 } from '../lib/tauri';
-import { formatPeso, loanTypeLabel, normLoanType, formatDate, calculateLoanPayment, calculateMaxLoanable } from '../lib/utils';
+import { formatPeso, loanTypeLabel, normLoanType, formatDate } from '../lib/utils';
 import type { Member, Payment, Loan, LoanApplication, TreasurerLoan } from '../types';
 
 // ============================================================
@@ -58,14 +45,7 @@ export function PageHeader({ title, subtitle, actions }: { title: string; subtit
   );
 }
 
-export function StatCard({ label, value, sub, icon: Icon, color = 'coop-dark' }: { label: string; value: string | number; sub: string; icon?: React.ElementType; color?: string }) {
-  const colorMap: Record<string, string> = {
-    'coop-dark': 'border-coop-dark/20',
-    blue: 'border-blue-500/20',
-    green: 'border-green-500/20',
-    amber: 'border-amber-500/20',
-    red: 'border-red-500/20',
-  };
+export function StatCard({ label, value, sub, icon: Icon, color = 'coop-dark' }: { label: string; value: string | number; sub: string; icon: React.ElementType; color?: string }) {
   return (
     <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
       <div className="flex items-center justify-between mb-3">
@@ -159,14 +139,14 @@ export function DataTable<T extends Record<string, any>>({
 
 export function Badge({ status }: { status: string }) {
   const variants: Record<string, string> = {
-    'Pending': 'bg-yellow-100 text-yellow-700',
-    'Confirmed': 'bg-green-100 text-green-700',
-    'Rejected': 'bg-red-100 text-red-700',
+    Pending: 'bg-yellow-100 text-yellow-700',
+    Confirmed: 'bg-green-100 text-green-700',
+    Rejected: 'bg-red-100 text-red-700',
     'Under Review': 'bg-orange-100 text-orange-700',
-    'Active': 'bg-blue-100 text-blue-700',
-    'Paid': 'bg-emerald-100 text-emerald-700',
-    'Approved': 'bg-green-100 text-green-700',
-    'Released': 'bg-emerald-100 text-emerald-700',
+    Active: 'bg-blue-100 text-blue-700',
+    Paid: 'bg-emerald-100 text-emerald-700',
+    Approved: 'bg-green-100 text-green-700',
+    Released: 'bg-emerald-100 text-emerald-700',
     'Approved (In Settlement)': 'bg-blue-100 text-blue-700',
   };
   return (
@@ -194,7 +174,7 @@ export function FormCard({ children, title }: { children: React.ReactNode; title
   );
 }
 
-export function InfoBanner({ title, text, icon = 'ℹ️', variant = 'info' }: { title: string; text: string; icon?: string; variant?: 'info' | 'success' | 'warning' | 'danger' }) {
+export function InfoBanner({ title, text, icon = 'info', variant = 'info' }: { title: string; text: string; icon?: string; variant?: 'info' | 'success' | 'warning' | 'danger' }) {
   const variants: Record<string, { bg: string; border: string; text: string }> = {
     info: { bg: '#E6F1FB', border: '#B5D4F4', text: '#185FA5' },
     success: { bg: '#EAF3DE', border: '#C0DD97', text: '#3B6D11' },
@@ -207,7 +187,7 @@ export function InfoBanner({ title, text, icon = 'ℹ️', variant = 'info' }: {
       <div className={`flex-shrink-0 mt-0.5 text-${variant === 'info' ? 'blue-600' : variant === 'success' ? 'green-700' : variant === 'warning' ? 'yellow-700' : 'red-700'}`}>{icon}</div>
       <div>
         <div className={`font-semibold text-sm text-${variant === 'info' ? 'blue-900' : variant === 'success' ? 'green-900' : variant === 'warning' ? 'yellow-900' : 'red-900'}`}>{title}</div>
-        <div className={`text-sm ${variant === 'info' ? 'text-blue-700' : variant === 'success' ? 'text-green-800' : variant === 'warning' ? 'text-yellow-800' : 'text-red-800'}`} lineClamp={2}>{text}</div>
+        <div className={`text-sm line-clamp-2 ${variant === 'info' ? 'text-blue-700' : variant === 'success' ? 'text-green-800' : variant === 'warning' ? 'text-yellow-800' : 'text-red-800'}`}>{text}</div>
       </div>
     </div>
   );
@@ -228,13 +208,11 @@ export function EmptyState({ icon, title, sub }: { icon: string; title: string; 
 // ============================================================
 
 export function DashboardPage() {
-  const [tab, setTab] = useState<'overview' | 'loans'>('overview');
   const [loading, setLoading] = useState(true);
 
   const [applications, setApplications] = useState<LoanApplication[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
-  const [settings, setSettings] = useState<any>(null);
 
   useEffect(() => {
     loadAll();
@@ -243,16 +221,14 @@ export function DashboardPage() {
   const loadAll = async () => {
     setLoading(true);
     try {
-      const [appRes, payRes, memRes, setRes] = await Promise.allSettled([
+      const [appRes, payRes, memRes] = await Promise.allSettled([
         getLoanApplications(),
         getPayments(),
         getMembers(),
-        getSettings(),
       ]);
       if (appRes.status === 'fulfilled' && appRes.value.success && appRes.value.data) setApplications(appRes.value.data);
       if (payRes.status === 'fulfilled' && payRes.value.success && payRes.value.data) setPayments(payRes.value.data);
       if (memRes.status === 'fulfilled' && memRes.value.success && memRes.value.data) setMembers(memRes.value.data);
-      if (setRes.status === 'fulfilled' && setRes.value.success && setRes.value.data) setSettings(setRes.value.data);
     } catch (e) {
       console.error(e);
     } finally {
@@ -263,21 +239,6 @@ export function DashboardPage() {
   const pendingCount = applications.filter((a) => a.status === 'Pending').length;
   const settlementCount = applications.filter((a) => a.status === 'Approved (In Settlement)').length;
   const pendingPayments = payments.filter((p) => p.status === 'Pending').length;
-
-  const sectionCards = [
-    { label: 'Dashboard', icon: LayoutDashboard, sub: 'Overview of all loans, collections and members', color: 'blue', badge: 'You are here', badgeColor: 'bg-blue-100 text-blue-700' },
-    { label: 'Loan Applications', icon: FileText, sub: 'Review, approve or reject member loan requests', color: 'amber', badge: 'No data yet', badgeColor: 'bg-yellow-100 text-yellow-700' },
-    { label: 'Members', icon: Users, sub: 'All registered cooperative members', color: 'green', badge: 'View members', badgeColor: 'bg-green-100 text-green-700' },
-    { label: 'Short Term Loans', icon: CreditCard, sub: 'Max ₱15,000 · 1–6 months · 6% flat', color: 'blue', badge: 'No data yet', badgeColor: 'bg-blue-100 text-blue-700' },
-    { label: 'Regular Loans', icon: Users, sub: 'Max ₱200,000 · 1–5 years · 1% diminishing', color: 'green', badge: 'No data yet', badgeColor: 'bg-green-100 text-green-700' },
-    { label: 'Payments', icon: CreditCard, sub: 'Review and confirm member loan payments', color: 'green', badge: 'View payments', badgeColor: 'bg-green-100 text-green-700' },
-    { label: 'Collections', icon: CreditCard, sub: 'Monthly collection report and history', color: 'green', badge: 'View collections', badgeColor: 'bg-green-100 text-green-700' },
-    { label: 'Overdue', icon: AlertTriangle, sub: 'Members who missed their payment due date', color: 'red', badge: 'View overdue', badgeColor: 'bg-red-100 text-red-700' },
-    { label: 'Commodity Loans', icon: Package, sub: 'Max ₱5,000 · Max 2 months · 1% interest/month', color: 'amber', badge: 'No data yet', badgeColor: 'bg-yellow-100 text-yellow-700' },
-    { label: 'Settings', icon: SettingsIcon, sub: 'System configuration', color: 'gray', badge: 'Configure', badgeColor: 'bg-gray-100 text-gray-700' },
-    { label: 'Payment Reminders', icon: Mail, sub: 'Send email reminders for upcoming dues', color: 'amber', badge: 'View reminders', badgeColor: 'bg-yellow-100 text-yellow-700' },
-    { label: 'Financial Reports', icon: BarChart3, sub: 'Weekly, monthly & yearly reports', color: 'purple', badge: 'Generate', badgeColor: 'bg-purple-100 text-purple-700' },
-  ];
 
   if (loading) {
     return (
@@ -290,7 +251,7 @@ export function DashboardPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <PageHeader title="Loan Dashboard" subtitle="AY 2025-2026 · Welcome back, Admin!" />
+      <PageHeader title="Loan Dashboard" subtitle="AY 2025-2026 Welcome back Admin!" />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Pending Applications" value={pendingCount} sub="Awaiting approval" icon={FileText} color="amber" />
@@ -301,24 +262,18 @@ export function DashboardPage() {
 
       <SectionTitle title="All Sections" />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {sectionCards.map((card, i) => (
-          <div
-            key={i}
-            onClick={() => {
-              // Navigation handled by parent layout
-            }}
-            className="bg-white rounded-2xl border border-gray-100 p-4 hover:shadow-md transition-all cursor-pointer group"
-          >
-            <div className="flex items-center gap-3 mb-3">
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center bg-${card.color}-100 text-${card.color}-600`}>
-                <card.icon className="w-5 h-5" />
-              </div>
-              <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${card.badgeColor}`}>{card.badge}</span>
-            </div>
-            <div className="font-semibold text-coop-dark text-sm">{card.label}</div>
-            <div className="text-xs text-gray-500 mt-1">{card.sub}</div>
-          </div>
-        ))}
+        <DashboardCard label="Dashboard" icon={LayoutDashboard} sub="Overview of all loans collections and members" color="blue" badge="You are here" badgeColor="bg-blue-100 text-blue-700" />
+        <DashboardCard label="Loan Applications" icon={FileText} sub="Review approve or reject member loan requests" color="amber" badge="No data yet" badgeColor="bg-yellow-100 text-yellow-700" />
+        <DashboardCard label="Members" icon={Users} sub="All registered cooperative members" color="green" badge="View members" badgeColor="bg-green-100 text-green-700" />
+        <DashboardCard label="Short Term Loans" icon={CreditCard} sub="Max 15000 1-6 months 6 percent flat" color="blue" badge="No data yet" badgeColor="bg-blue-100 text-blue-700" />
+        <DashboardCard label="Regular Loans" icon={Users} sub="Max 200000 1-5 years 1 percent diminishing" color="green" badge="No data yet" badgeColor="bg-green-100 text-green-700" />
+        <DashboardCard label="Payments" icon={CreditCard} sub="Review and confirm member loan payments" color="green" badge="View payments" badgeColor="bg-green-100 text-green-700" />
+        <DashboardCard label="Collections" icon={CreditCard} sub="Monthly collection report and history" color="green" badge="View collections" badgeColor="bg-green-100 text-green-700" />
+        <DashboardCard label="Overdue" icon={AlertTriangle} sub="Members who missed their payment due date" color="red" badge="View overdue" badgeColor="bg-red-100 text-red-700" />
+        <DashboardCard label="Commodity Loans" icon={Package} sub="Max 5000 Max 2 months 1 percent interest per month" color="amber" badge="No data yet" badgeColor="bg-yellow-100 text-yellow-700" />
+        <DashboardCard label="Settings" icon={SettingsIcon} sub="System configuration" color="gray" badge="Configure" badgeColor="bg-gray-100 text-gray-700" />
+        <DashboardCard label="Payment Reminders" icon={Mail} sub="Send email reminders for upcoming dues" color="amber" badge="View reminders" badgeColor="bg-yellow-100 text-yellow-700" />
+        <DashboardCard label="Financial Reports" icon={BarChart3} sub="Weekly monthly yearly reports" color="purple" badge="Generate" badgeColor="bg-purple-100 text-purple-700" />
       </div>
 
       <SectionTitle title="Recent Loan Accounts" />
@@ -336,7 +291,7 @@ export function DashboardPage() {
           <tbody className="divide-y divide-gray-50">
             {applications.slice(0, 10).map((app) => (
               <tr key={app.row} className="hover:bg-gray-50 transition-colors">
-                <td className="px-4 py-3 text-sm font-medium">{app.firstName} {app.lastName}</td>
+                <td className="px-4 py-3 text-sm font-medium">{app.first_name} {app.last_name}</td>
                 <td className="px-4 py-3 text-sm">{normLoanType(app.loan_type)}</td>
                 <td className="px-4 py-3 text-sm font-semibold">{formatPeso(app.amount)}</td>
                 <td className="px-4 py-3 text-sm">{formatPeso(app.net_proceeds)}</td>
@@ -346,6 +301,21 @@ export function DashboardPage() {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+export function DashboardCard({ label, icon, sub, color, badge, badgeColor }: { label: string; icon: React.ElementType; sub: string; color: string; badge: string; badgeColor: string }) {
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 p-4 hover:shadow-md transition-all cursor-pointer group">
+      <div className="flex items-center gap-3 mb-3">
+        <div className={`w-8 h-8 rounded-lg flex items-center justify-center bg-${color}-100 text-${color}-600`}>
+          <icon className="w-5 h-5" />
+        </div>
+        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${badgeColor}`}>{badge}</span>
+      </div>
+      <div className="font-semibold text-coop-dark text-sm">{label}</div>
+      <div className="text-xs text-gray-500 mt-1">{sub}</div>
     </div>
   );
 }
@@ -371,7 +341,7 @@ export function ApplicationsPage() {
   });
 
   const handleApprove = async (row: number, app: LoanApplication) => {
-    if (!confirm(`Approve loan for ${app.firstName} ${app.lastName} (₱${app.amount})?`)) return;
+    if (!confirm(`Approve loan for ${app.first_name} ${app.last_name} amount ${app.amount}?`)) return;
     const deductionData = {
       totalB: app.total_past_dues,
       totalC: app.other_deductions,
@@ -406,7 +376,7 @@ export function ApplicationsPage() {
     <div className="p-6 space-y-6">
       <PageHeader
         title="Loan Applications"
-        subtitle="Review, approve or reject member loan requests"
+        subtitle="Review approve or reject member loan requests"
         actions={
           <div className="flex items-center gap-3">
             <button className="px-3 py-2 text-xs border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">Refresh</button>
@@ -439,7 +409,7 @@ export function ApplicationsPage() {
         data={filtered}
         rowRenderer={(app) => (
           <>
-            <td className="px-4 py-3 text-sm">{app.firstName} {app.lastName}</td>
+            <td className="px-4 py-3 text-sm">{app.first_name} {app.last_name}</td>
             <td className="px-4 py-3 text-sm">{normLoanType(app.loan_type)}</td>
             <td className="px-4 py-3 text-sm">{app.loan_type}</td>
             <td className="px-4 py-3 text-sm font-semibold">{formatPeso(app.amount)}</td>
@@ -473,14 +443,14 @@ export function CommodityPage() {
     <div className="p-6 space-y-6">
       <PageHeader
         title="Commodity Loans"
-        subtitle="Max ₱5,000 · Max 2 months · 1% interest/month"
+        subtitle="Max 5000 Max 2 months 1 percent interest per month"
         actions={<button className="btn-primary flex items-center gap-2"><Plus className="w-4 h-4" /> New Commodity Loan</button>}
       />
 
       <InfoBanner
         title="Commodity Loan Rules"
-        text="Maximum amount: ₱5,000 · Maximum term: 2 months · Interest: 1% per month · Monthly = (Amount × 1.01) ÷ Months"
-        icon="📦"
+        text="Maximum amount 5000 Maximum term 2 months Interest 1 percent per month Monthly Amount times 1.01 divided by Months"
+        icon="box"
         variant="warning"
       />
 
@@ -510,13 +480,13 @@ export function CommodityPage() {
         data={[]}
         rowRenderer={() => (
           <>
-            <td className="px-4 py-3 text-sm">—</td>
+            <td className="px-4 py-3 text-sm">-</td>
             <td className="px-4 py-3 text-sm">Commodity</td>
-            <td className="px-4 py-3 text-sm">₱0.00</td>
-            <td className="px-4 py-3 text-sm">₱0.00</td>
-            <td className="px-4 py-3 text-sm">—</td>
-            <td className="px-4 py-3 text-sm">—</td>
-            <td className="px-4 py-3 text-sm">₱0.00</td>
+            <td className="px-4 py-3 text-sm">0.00</td>
+            <td className="px-4 py-3 text-sm">0.00</td>
+            <td className="px-4 py-3 text-sm">-</td>
+            <td className="px-4 py-3 text-sm">-</td>
+            <td className="px-4 py-3 text-sm">0.00</td>
             <td className="px-4 py-3"><Badge status="Paid" /></td>
             <td className="px-4 py-3"><button className="px-2 py-1 text-gray-500 hover:text-coop-dark">View</button></td>
           </>
@@ -533,14 +503,14 @@ export function RegularPage() {
     <div className="p-6 space-y-6">
       <PageHeader
         title="Regular Loans"
-        subtitle="Max ₱200,000 · 1–5 years · 1% diminishing"
+        subtitle="Max 200000 1-5 years 1 percent diminishing"
         actions={<button className="btn-primary flex items-center gap-2"><Plus className="w-4 h-4" /> New Regular Loan</button>}
       />
 
       <InfoBanner
         title="Regular Loan Rules"
-        text="Max ₱200,000 or 3× capital · 1–5 years · 1% monthly on remaining balance (diminishing) · Teachers only"
-        icon="🏦"
+        text="Max 200000 or 3 times capital 1-5 years 1 percent monthly on remaining balance diminishing Teachers only"
+        icon="bank"
         variant="success"
       />
 
@@ -570,13 +540,13 @@ export function RegularPage() {
         data={[]}
         rowRenderer={() => (
           <>
-            <td className="px-4 py-3 text-sm">—</td>
+            <td className="px-4 py-3 text-sm">-</td>
             <td className="px-4 py-3 text-sm">Regular</td>
-            <td className="px-4 py-3 text-sm">₱0.00</td>
-            <td className="px-4 py-3 text-sm">₱0.00</td>
-            <td className="px-4 py-3 text-sm">₱0.00</td>
-            <td className="px-4 py-3 text-sm">—</td>
-            <td className="px-4 py-3 text-sm">₱0.00</td>
+            <td className="px-4 py-3 text-sm">0.00</td>
+            <td className="px-4 py-3 text-sm">0.00</td>
+            <td className="px-4 py-3 text-sm">0.00</td>
+            <td className="px-4 py-3 text-sm">-</td>
+            <td className="px-4 py-3 text-sm">0.00</td>
             <td className="px-4 py-3"><Badge status="Active" /></td>
             <td className="px-4 py-3"><button className="px-2 py-1 text-gray-500 hover:text-coop-dark">View</button></td>
           </>
@@ -593,14 +563,14 @@ export function ShortTermPage() {
     <div className="p-6 space-y-6">
       <PageHeader
         title="Short Term Loans"
-        subtitle="Max ₱15,000 · 1–6 months · 6% flat"
+        subtitle="Max 15000 1-6 months 6 percent flat"
         actions={<button className="btn-primary flex items-center gap-2"><Plus className="w-4 h-4" /> New STL</button>}
       />
 
       <InfoBanner
         title="Short Term Loan Rules"
-        text="Max ₱15,000 · 1–6 months · 6% flat rate · Monthly = (Amount × 1.06) ÷ Months"
-        icon="💳"
+        text="Max 15000 1-6 months 6 percent flat rate Monthly Amount times 1.06 divided by Months"
+        icon="credit-card"
         variant="info"
       />
 
@@ -630,13 +600,13 @@ export function ShortTermPage() {
         data={[]}
         rowRenderer={() => (
           <>
-            <td className="px-4 py-3 text-sm">—</td>
+            <td className="px-4 py-3 text-sm">-</td>
             <td className="px-4 py-3 text-sm">Short Term</td>
-            <td className="px-4 py-3 text-sm">₱0.00</td>
-            <td className="px-4 py-3 text-sm">₱0.00</td>
-            <td className="px-4 py-3 text-sm">—</td>
-            <td className="px-4 py-3 text-sm">—</td>
-            <td className="px-4 py-3 text-sm">₱0.00</td>
+            <td className="px-4 py-3 text-sm">0.00</td>
+            <td className="px-4 py-3 text-sm">0.00</td>
+            <td className="px-4 py-3 text-sm">-</td>
+            <td className="px-4 py-3 text-sm">-</td>
+            <td className="px-4 py-3 text-sm">0.00</td>
             <td className="px-4 py-3"><Badge status="Active" /></td>
             <td className="px-4 py-3"><button className="px-2 py-1 text-gray-500 hover:text-coop-dark">View</button></td>
           </>
@@ -683,7 +653,7 @@ export function MembersPage() {
         data={members}
         rowRenderer={(m) => (
           <>
-            <td className="px-4 py-3 text-sm font-medium">{m.firstName} {m.lastName}</td>
+            <td className="px-4 py-3 text-sm font-medium">{m.first_name} {m.last_name}</td>
             <td className="px-4 py-3 text-sm font-semibold">{m.username}</td>
             <td className="px-4 py-3 text-sm">{m.member_type}</td>
             <td className="px-4 py-3 text-sm">{formatPeso(m.capital)}</td>
@@ -746,13 +716,13 @@ export function PaymentsPage() {
         data={payments.slice(0, 50)}
         rowRenderer={(pay) => (
           <>
-            <td className="px-4 py-3 text-sm">{pay.memberName}</td>
+            <td className="px-4 py-3 text-sm">{pay.member_name}</td>
             <td className="px-4 py-3 text-sm">{normLoanType(pay.loan_type)}</td>
             <td className="px-4 py-3 text-sm font-semibold">{formatPeso(pay.amount)}</td>
             <td className="px-4 py-3 text-sm">{pay.method}</td>
             <td className="px-4 py-3 text-sm text-gray-600">{formatDate(pay.date_paid)}</td>
             <td className="px-4 py-3"><Badge status={pay.status} /></td>
-            <td className="px-4 py-3 text-sm">{pay.or_number || '—'}</td>
+            <td className="px-4 py-3 text-sm">{pay.or_number || '-'}</td>
             <td className="px-4 py-3">
               <div className="flex gap-1">
                 {pay.status === 'Pending' && (
@@ -785,7 +755,7 @@ export function TreasurerPage() {
   }, []);
 
   const handleRelease = async (row: number, loan: TreasurerLoan) => {
-    if (!confirm(`Release loan for ${loan.firstName} ${loan.lastName}?`)) return;
+    if (!confirm(`Release loan for ${loan.first_name} ${loan.last_name}?`)) return;
     const res = await finalReleaseLoan(row, {}, {});
     if (res.success) {
       alert('Released!');
@@ -801,7 +771,7 @@ export function TreasurerPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <PageHeader title="Treasurer — Loan Release" subtitle="Release approved loans to members" />
+      <PageHeader title="Treasurer Loan Release" subtitle="Release approved loans to members" />
 
       <DataTable
         columns={[
@@ -815,7 +785,7 @@ export function TreasurerPage() {
         data={loans}
         rowRenderer={(loan) => (
           <>
-            <td className="px-4 py-3 text-sm">{loan.firstName} {loan.lastName}</td>
+            <td className="px-4 py-3 text-sm">{loan.first_name} {loan.last_name}</td>
             <td className="px-4 py-3 text-sm">{normLoanType(loan.loan_type)}</td>
             <td className="px-4 py-3 text-sm font-semibold">{formatPeso(loan.amount)}</td>
             <td className="px-4 py-3 text-sm font-semibold text-green-700">{formatPeso(loan.net_proceeds)}</td>
@@ -879,10 +849,6 @@ export function SettingsPage() {
   );
 }
 
-// ============================================================
-// MEMBER HOME PAGE (Member dashboard)
-// ============================================================
-
 export function MemberHomePage() {
   const [data, setData] = useState<any>({ loans: [], applications: [], payments: [] });
   const [cbu, setCbu] = useState<any>(null);
@@ -910,7 +876,7 @@ export function MemberHomePage() {
   };
 
   const activeLoans = (data.loans || []).filter((l: Loan) => l.status === 'Active');
-  const totalBalance = activeLoans.reduce((sum, l) => sum + l.balance, 0);
+  const totalBalance = activeLoans.reduce((sum: number, l: Loan) => sum + l.balance, 0);
 
   if (loading) {
     return <div className="p-6 flex items-center justify-center h-64"><div className="w-8 h-8 border-4 border-coop-light border-t-transparent rounded-full animate-spin" /></div>;
@@ -921,7 +887,7 @@ export function MemberHomePage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-coop-dark">Member Dashboard</h1>
-          <p className="text-gray-500">Welcome back, {user?.first_name} {user?.last_name}</p>
+          <p className="text-gray-500">Welcome back {user?.first_name} {user?.last_name}</p>
         </div>
         <button className="px-3 py-2 text-xs border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50" onClick={loadData}>Refresh</button>
       </div>
@@ -929,7 +895,7 @@ export function MemberHomePage() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <StatCard label="Active Loans" value={activeLoans.length} sub="Currently running" icon={CreditCard} color="blue" />
         <StatCard label="Outstanding Balance" value={formatPeso(totalBalance)} sub="Total remaining" icon={Clock} color="coop-dark" />
-        <StatCard label="Capital (CBU)" value={formatPeso(cbu?.current_cbu || user?.capital || 0)} sub="Your capital" icon={User} color="green" />
+        <StatCard label="Capital CBU" value={formatPeso(cbu?.current_cbu || user?.capital || 0)} sub="Your capital" icon={User} color="green" />
         <StatCard label="Pending Applications" value={(data.applications || []).filter((a: LoanApplication) => a.status === 'Pending').length} sub="Awaiting review" icon={FileText} color="amber" />
       </div>
 
@@ -937,7 +903,7 @@ export function MemberHomePage() {
         {['loans', 'payments', 'apply'].map((t) => (
           <button
             key={t}
-            onClick={() => setTab(t as any)}
+            onClick={() => setTab(t as 'loans' | 'payments' | 'apply')}
             className={`px-4 py-2 border-b-2 font-medium text-sm transition-colors ${
               tab === t ? 'border-coop-dark text-coop-dark' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
@@ -951,7 +917,7 @@ export function MemberHomePage() {
         <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
           <h3 className="font-semibold text-coop-dark mb-4">Your Loans</h3>
           {activeLoans.length === 0 ? (
-            <EmptyState icon="💳" title="No active loans" sub="Your active loans will appear here once approved." />
+            <EmptyState icon="credit-card" title="No active loans" sub="Your active loans will appear here once approved." />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
@@ -1011,7 +977,7 @@ export function MemberHomePage() {
                       <td className="px-4 py-3 text-sm font-semibold">{formatPeso(pay.amount)}</td>
                       <td className="px-4 py-3 text-sm">{pay.method}</td>
                       <td className="px-4 py-3"><Badge status={pay.status} /></td>
-                      <td className="px-4 py-3 text-sm">{pay.or_number || '—'}</td>
+                      <td className="px-4 py-3 text-sm">{pay.or_number || '-'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1036,7 +1002,7 @@ export function MemberHomePage() {
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-coop-dark mb-1">Amount (₱)</label>
+                <label className="block text-xs font-semibold text-coop-dark mb-1">Amount peso</label>
                 <input type="number" step="0.01" className="input-field" required />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -1066,9 +1032,9 @@ export function MemberHomePage() {
         <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
           <h3 className="font-semibold text-coop-dark mb-4">Apply for Loan</h3>
           <p className="text-sm text-gray-500 mb-4">
-            Your maximum loanable amount based on Capital (CBU): <span className="font-semibold text-coop-dark">{formatPeso(cbu?.current_cbu || user?.capital || 0)}</span>
+            Your maximum loanable amount based on Capital CBU: <span className="font-semibold text-coop-dark">{formatPeso(cbu?.current_cbu || user?.capital || 0)}</span>
           </p>
-          <p className="text-xs text-gray-500 mb-4">Regular: up to 300% of CBU | Short Term: up to 80% of CBU | Commodity: up to 80% of CBU</p>
+          <p className="text-xs text-gray-500 mb-4">Regular up to 300 percent of CBU Short Term up to 80 percent of CBU Commodity up to 80 percent of CBU</p>
           <form className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
@@ -1080,11 +1046,11 @@ export function MemberHomePage() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-coop-dark mb-1">Amount Requested (₱)</label>
+                <label className="block text-xs font-semibold text-coop-dark mb-1">Amount Requested peso</label>
                 <input type="number" step="0.01" className="input-field" required />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-coop-dark mb-1">Term (Months)</label>
+                <label className="block text-xs font-semibold text-coop-dark mb-1">Term Months</label>
                 <input type="number" className="input-field" required />
               </div>
               <div>
@@ -1099,7 +1065,7 @@ export function MemberHomePage() {
             <button type="button" className="btn-info w-full flex items-center justify-center gap-2">
               <FileText className="w-4 h-4" /> Submit Application
             </button>
-            <p className="text-xs text-gray-500 mt-2">Application submission requires backend endpoint. Contact your loan officer.</p>
+            <p className="text-xs text-gray-500 mt-2">Application submission requires backend endpoint Contact your loan officer.</p>
           </form>
         </div>
       )}

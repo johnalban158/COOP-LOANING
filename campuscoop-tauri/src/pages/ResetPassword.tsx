@@ -12,7 +12,7 @@ export default function ResetPassword() {
   // Get token from URL
   const token = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('token') : null;
 
-  const handleReset = async (e: React.FormEvent) => {
+  const handleReset = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const newPassword = formData.get('newPassword') as string;

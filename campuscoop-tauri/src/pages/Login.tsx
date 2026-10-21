@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { loginMember, loginOfficer, loginAdmin, checkSpreadsheetConnected } from '../lib/tauri';
-import { formatPeso } from '../lib/utils';
-import { User, ShieldAlert, Mail, Lock, ArrowRight } from 'lucide-react';
+import { loginMember, loginOfficer, loginAdmin } from '../lib/tauri';
+import { User, ShieldAlert, Mail, Lock } from 'lucide-react';
 
 type RoleConfig = {
   label: string;
@@ -24,7 +23,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleMemberLogin = async (e: React.FormEvent) => {
+  const handleMemberLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const username = formData.get('username') as string;
@@ -48,7 +47,7 @@ export default function LoginPage() {
     }
   };
 
-  const handleOfficerLogin = async (e: React.FormEvent) => {
+  const handleOfficerLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const username = formData.get('username') as string;
@@ -73,7 +72,7 @@ export default function LoginPage() {
     }
   };
 
-  const handleAdminLogin = async (e: React.FormEvent) => {
+  const handleAdminLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const username = formData.get('username') as string;
@@ -105,7 +104,6 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-coop-bg px-4">
       <div className="max-w-md w-full">
-        {/* Header */}
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-coop-dark rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
             <User className="w-9 h-9 text-coop-light" />
@@ -115,12 +113,11 @@ export default function LoginPage() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
-          {/* Role Tabs */}
           <div className="flex gap-2 mb-6">
             {['member', 'officer', 'admin'].map((v) => (
               <button
                 key={v}
-                onClick={() => setView(v)}
+                onClick={() => setView(v as 'member' | 'officer' | 'admin')}
                 className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                   view === v
                     ? 'bg-coop-dark text-white shadow-sm'

@@ -1,8 +1,6 @@
-import { invoke } from '@tauri-apps/api/core';
-
 // Check if we're running in Tauri (desktop) or browser (dev fallback)
 export const isTauri = () => {
-  return window.__TAURI__ !== undefined;
+  return (window as any).__TAURI__ !== undefined;
 };
 
 // Helper to format peso

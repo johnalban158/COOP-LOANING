@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { loginOfficer } from '../lib/tauri';
-import { ShieldAlert, User, ArrowLeft } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 
 export default function OfficerSetup() {
   const navigate = useNavigate();
@@ -16,7 +16,7 @@ export default function OfficerSetup() {
     { value: 'chairperson', label: 'Chairperson' },
   ];
 
-  const handleSetup = async (e: React.FormEvent) => {
+  const handleSetup = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const username = formData.get('username') as string;

@@ -4,37 +4,31 @@ import {
   approveApplication,
   rejectApplication,
   finalReleaseLoan,
-  batchReleaseLoans,
   getPayments,
   getMembers,
   getTreasurerReleaseData,
-  getOfficerBorrowerData,
   getSettings,
   saveSettings,
 } from '../lib/tauri';
 import type { LoanApplication, Payment, Member, TreasurerLoan, Settings } from '../types';
-import { formatPeso, loanTypeLabel, normLoanType, formatDate } from '../lib/utils';
+import { formatPeso, normLoanType, formatDate } from '../lib/utils';
 import {
   FileText,
   CreditCard,
   Users,
-  ShieldAlert,
   Package,
   CheckCircle2,
   XCircle,
   Clock,
   RefreshCw,
-  Search,
   Plus,
   Mail,
-  AlertTriangle,
 } from 'lucide-react';
 
 export default function AdminDashboard() {
   const [tab, setTab] = useState<'applications' | 'payments' | 'members' | 'officers' | 'treasurer' | 'settings'>('applications');
   const [loading, setLoading] = useState(false);
 
-  // Data
   const [applications, setApplications] = useState<LoanApplication[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
@@ -79,13 +73,12 @@ export default function AdminDashboard() {
   };
 
   const handleApprove = async (row: number, app: LoanApplication) => {
+    if (!confirm(`Approve loan for ${app.first_name} ${app.last_name} (₱${app.amount})?`)) return;
     const deductionData = {
       totalB: app.total_past_dues,
       totalC: app.other_deductions,
       netProceeds: app.net_proceeds,
     };
-    if (!confirm(`Approve loan application for ${app.firstName} ${app.lastName} (₱${app.amount})?`)) return;
-
     try {
       const res = await approveApplication(row, deductionData);
       if (res.success) {
@@ -115,8 +108,8 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleRelease = async (row: number, app: TreasurerLoan) => {
-    if (!confirm(`Release loan for ${app.firstName} ${app.lastName}?`)) return;
+  const handleRelease = async (row: number, loan: TreasurerLoan) => {
+    if (!confirm(`Release loan for ${loan.first_name} ${loan.last_name}?`)) return;
     try {
       const res = await finalReleaseLoan(row, {}, {});
       if (res.success) {
@@ -156,9 +149,17 @@ export default function AdminDashboard() {
   const settlementCount = applications.filter((a) => a.status === 'Approved (In Settlement)').length;
   const pendingPayments = payments.filter((p) => p.status === 'Pending').length;
 
+  const navItems = [
+    { key: 'applications', label: 'Loan Applications' },
+    { key: 'payments', label: 'Payments' },
+    { key: 'members', label: 'Members' },
+    { key: 'officers', label: 'Officers' },
+    { key: 'treasurer', label: 'Treasurer Release' },
+    { key: 'settings', label: 'Settings' },
+  ];
+
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-coop-dark">Admin Dashboard</h1>
@@ -171,97 +172,85 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        <div className="card">
-          <p className="text-xs text-gray-500 uppercase">Pending Applications</p>
+        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Pending Applications</p>
           <h3 className="text-2xl font-bold text-coop-dark">{pendingCount}</h3>
+          <p className="text-xs text-gray-500 mt-1">Awaiting approval</p>
         </div>
-        <div className="card">
-          <p className="text-xs text-gray-500 uppercase">In Settlement</p>
+        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">In Settlement</p>
           <h3 className="text-2xl font-bold text-coop-dark">{settlementCount}</h3>
+          <p className="text-xs text-gray-500 mt-1">Awaiting release</p>
         </div>
-        <div className="card">
-          <p className="text-xs text-gray-500 uppercase">Pending Payments</p>
+        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Pending Payments</p>
           <h3 className="text-2xl font-bold text-coop-dark">{pendingPayments}</h3>
+          <p className="text-xs text-gray-500 mt-1">Needs confirmation</p>
         </div>
-        <div className="card">
-          <p className="text-xs text-gray-500 uppercase">Total Members</p>
+        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Total Members</p>
           <h3 className="text-2xl font-bold text-coop-dark">{members.length}</h3>
+          <p className="text-xs text-gray-500 mt-1">Registered members</p>
         </div>
       </div>
 
-      {/* Navigation Tabs */}
       <div className="flex gap-1 border-b border-gray-200 mb-6">
-        {[['applications', 'Loan Applications'], ['payments', 'Payments'], ['members', 'Members'], ['officers', 'Officers'], ['treasurer', 'Treasurer Release'], ['settings', 'Settings']].map(([key, label]) => (
+      {navItems.map((item) => (
           <button
-            key={key}
-            onClick={() => setTab(key)}
+            key={item.key}
+            onClick={() => setTab(item.key)}
             className={`px-4 py-2 border-b-2 font-medium text-sm transition-colors ${
-              tab === key ? 'border-coop-dark text-coop-dark' : 'border-transparent text-gray-500 hover:text-gray-700'
+              tab === item.key ? 'border-coop-dark text-coop-dark' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            {label}
+            {item.label}
           </button>
         ))}
       </div>
 
-      {/* Applications Tab */}
       {tab === 'applications' && (
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
+          <div className="flex items-center justify-between mb-4 p-6">
             <h3 className="font-semibold text-coop-dark">Loan Applications</h3>
             <button className="btn-primary flex items-center gap-2">
               <Plus className="w-4 h-4" /> New Application
             </button>
           </div>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto p-6">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="table-header">Member</th>
-                  <th className="table-header">Loan Type</th>
-                  <th className="table-header">Amount</th>
-                  <th className="table-header">Term</th>
-                  <th className="table-header">Submitted</th>
-                  <th className="table-header">Status</th>
-                  <th className="table-header">Actions</th>
+                <tr className="border-b border-gray-50">
+                  <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Applicant</th>
+                  <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Type</th>
+                  <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Loan</th>
+                  <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Amount</th>
+                  <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Months</th>
+                  <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Date Filed</th>
+                  <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
-              <tbody>
-                {applications.map((app: LoanApplication) => (
+              <tbody className="divide-y divide-gray-50">
+                {applications.map((app) => (
                   <tr key={app.row} className="hover:bg-gray-50 transition-colors">
-                    <td className="table-cell">{app.firstName} {app.lastName}</td>
-                    <td className="table-cell">{normLoanType(app.loan_type)}</td>
-                    <td className="table-cell font-semibold">{formatPeso(app.amount)}</td>
-                    <td className="table-cell">{app.term} months</td>
-                    <td className="table-cell text-gray-600 text-sm">{formatDate(app.date_submitted)}</td>
-                    <td className="table-cell">
-                      <span className={`badge ${
-                        app.status === 'Pending' ? 'badge-pending' :
-                        app.status.includes('Approved') ? 'badge-active' :
-                        app.status === 'Released' ? 'badge-paid' :
-                        app.status === 'Rejected' ? 'badge-rejected' : 'badge-under-review'
-                      }`}>
-                        {app.status}
-                      </span>
-                    </td>
-                    <td className="table-cell">
+                    <td className="px-4 py-3 text-sm">{app.first_name} {app.last_name}</td>
+                    <td className="px-4 py-3 text-sm">{normLoanType(app.loan_type)}</td>
+                    <td className="px-4 py-3 text-sm">{app.loan_type}</td>
+                    <td className="px-4 py-3 text-sm font-semibold">{formatPeso(app.amount)}</td>
+                    <td className="px-4 py-3 text-sm">{app.term}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{formatDate(app.date_submitted)}</td>
+                    <td className="px-4 py-3"><Badge status={app.status} /></td>
+                    <td className="px-4 py-3">
                       <div className="flex gap-1">
                         {app.status === 'Pending' && (
                           <>
-                            <button onClick={() => handleApprove(app.row, app)} className="p-2 text-green-600 hover:bg-green-50 rounded-lg" title="Approve">
-                              <CheckCircle2 className="w-4 h-4" />
-                            </button>
-                            <button onClick={() => handleReject(app.row, app)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Reject">
-                              <XCircle className="w-4 h-4" />
-                            </button>
+                            <button onClick={() => handleApprove(app.row, app)} className="px-3 py-1.5 text-green-600 bg-green-50 rounded-lg text-xs font-semibold hover:bg-green-100">Approve</button>
+                            <button onClick={() => handleReject(app.row, app)} className="px-3 py-1.5 text-red-600 bg-red-50 rounded-lg text-xs font-semibold hover:bg-red-100">Reject</button>
                           </>
                         )}
                         {app.status === 'Approved (In Settlement)' && (
-                          <button onClick={() => handleRelease(app.row, app)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Release">
-                            <Mail className="w-4 h-4" />
-                          </button>
+                          <button className="px-3 py-1.5 text-blue-600 bg-blue-50 rounded-lg text-xs font-semibold hover:bg-blue-100">Release</button>
                         )}
                       </div>
                     </td>
@@ -273,53 +262,44 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Payments Tab */}
       {tab === 'payments' && (
-        <div className="card">
-          <h3 className="font-semibold text-coop-dark mb-4">All Payments</h3>
-          <div className="overflow-x-auto">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
+          <h3 className="font-semibold text-coop-dark mb-4 p-6">All Payments</h3>
+          <div className="overflow-x-auto p-6">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="table-header">Member</th>
-                  <th className="table-header">Loan Type</th>
-                  <th className="table-header">Amount</th>
-                  <th className="table-header">Method</th>
-                  <th className="table-header">Date</th>
-                  <th className="table-header">Status</th>
-                  <th className="table-header">OR Number</th>
-                  <th className="table-header">Actions</th>
+                <tr className="border-b border-gray-50">
+                  <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Member</th>
+                  <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Loan Type</th>
+                  <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Amount</th>
+                  <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Method</th>
+                  <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Date</th>
+                  <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">OR Number</th>
+                  <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
-              <tbody>
-                {payments.slice(0, 50).map((pay: Payment) => (
+              <tbody className="divide-y divide-gray-50">
+                {payments.slice(0, 50).map((pay) => (
                   <tr key={pay.row} className="hover:bg-gray-50 transition-colors">
-                    <td className="table-cell">{pay.memberName}</td>
-                    <td className="table-cell">{normLoanType(pay.loan_type)}</td>
-                    <td className="table-cell font-semibold">{formatPeso(pay.amount)}</td>
-                    <td className="table-cell text-sm">{pay.method}</td>
-                    <td className="table-cell text-gray-600 text-sm">{formatDate(pay.date_paid)}</td>
-                    <td className="table-cell">
-                      <span className={`badge ${
-                        pay.status === 'Confirmed' ? 'badge-confirmed' :
-                        pay.status === 'Pending' ? 'badge-pending' :
-                        pay.status === 'Rejected' ? 'badge-rejected' : 'badge-under-review'
-                      }`}>
-                        {pay.status}
-                      </span>
-                    </td>
-                    <td className="table-cell text-sm">{pay.or_number || '-'}</td>
-                    <td className="table-cell">
+                    <td className="px-4 py-3 text-sm">{pay.member_name}</td>
+                    <td className="px-4 py-3 text-sm">{normLoanType(pay.loan_type)}</td>
+                    <td className="px-4 py-3 text-sm font-semibold">{formatPeso(pay.amount)}</td>
+                    <td className="px-4 py-3 text-sm">{pay.method}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{formatDate(pay.date_paid)}</td>
+                    <td className="px-4 py-3"><Badge status={pay.status} /></td>
+                    <td className="px-4 py-3 text-sm">{pay.or_number || '—'}</td>
+                    <td className="px-4 py-3">
                       <div className="flex gap-1">
                         {pay.status === 'Pending' && (
                           <>
-                            <button onClick={() => alert('Confirm payment ' + pay.row)} className="p-2 text-green-600 hover:bg-green-50 rounded-lg" title="Confirm">
+                            <button onClick={() => alert('Confirm payment ' + pay.row)} className="p-2 text-green-600 hover:bg-green-50 rounded-lg text-xs" title="Confirm">
                               <CheckCircle2 className="w-4 h-4" />
                             </button>
-                            <button onClick={() => alert('Review payment ' + pay.row)} className="p-2 text-yellow-600 hover:bg-yellow-50 rounded-lg" title="Review">
+                            <button onClick={() => alert('Review payment ' + pay.row)} className="p-2 text-yellow-600 hover:bg-yellow-50 rounded-lg text-xs" title="Review">
                               <Clock className="w-4 h-4" />
                             </button>
-                            <button onClick={() => alert('Reject payment ' + pay.row)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Reject">
+                            <button onClick={() => alert('Reject payment ' + pay.row)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg text-xs" title="Reject">
                               <XCircle className="w-4 h-4" />
                             </button>
                           </>
@@ -334,33 +314,30 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Members Tab */}
       {tab === 'members' && (
-        <div className="card">
-          <h3 className="font-semibold text-coop-dark mb-4">Members</h3>
-          <div className="overflow-x-auto">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
+          <h3 className="font-semibold text-coop-dark mb-4 p-6">Members</h3>
+          <div className="overflow-x-auto p-6">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="table-header">Name</th>
-                  <th className="table-header">Login ID</th>
-                  <th className="table-header">Type</th>
-                  <th className="table-header">Capital</th>
-                  <th className="table-header">Status</th>
-                  <th className="table-header">Role</th>
+                <tr className="border-b border-gray-50">
+                  <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Name</th>
+                  <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Login ID</th>
+                  <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Type</th>
+                  <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Capital</th>
+                  <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Role</th>
                 </tr>
               </thead>
-              <tbody>
-                {members.map((m: Member) => (
+              <tbody className="divide-y divide-gray-50">
+                {members.map((m) => (
                   <tr key={m.username} className="hover:bg-gray-50 transition-colors">
-                    <td className="table-cell">{m.firstName} {m.lastName}</td>
-                    <td className="table-cell font-semibold">{m.username}</td>
-                    <td className="table-cell">{m.member_type}</td>
-                    <td className="table-cell">{formatPeso(m.capital)}</td>
-                    <td className="table-cell">
-                      <span className={`badge ${m.status === 'Active' ? 'badge-active' : 'badge-pending'}`}>{m.status}</span>
-                    </td>
-                    <td className="table-cell">{m.role || 'Member'}</td>
+                    <td className="px-4 py-3 text-sm">{m.first_name} {m.last_name}</td>
+                    <td className="px-4 py-3 text-sm font-semibold">{m.username}</td>
+                    <td className="px-4 py-3 text-sm">{m.member_type}</td>
+                    <td className="px-4 py-3 text-sm">{formatPeso(m.capital)}</td>
+                    <td className="px-4 py-3"><Badge status={m.status} /></td>
+                    <td className="px-4 py-3 text-sm">{m.role || 'Member'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -369,41 +346,37 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Officers Tab */}
       {tab === 'officers' && (
-        <div className="card">
+        <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
           <h3 className="font-semibold text-coop-dark mb-4">Officer Accounts</h3>
           <p className="text-sm text-gray-500 mb-4">Manage officer accounts (regular, shortterm, commodity, treasurer, chairperson).</p>
         </div>
       )}
 
-      {/* Treasurer Tab */}
       {tab === 'treasurer' && (
-        <div className="card">
-          <h3 className="font-semibold text-coop-dark mb-4">Treasurer - Loan Release</h3>
-          <div className="overflow-x-auto">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
+          <h3 className="font-semibold text-coop-dark mb-4 p-6">Treasurer — Loan Release</h3>
+          <div className="overflow-x-auto p-6">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="table-header">Member</th>
-                  <th className="table-header">Loan Type</th>
-                  <th className="table-header">Amount</th>
-                  <th className="table-header">Net Proceeds</th>
-                  <th className="table-header">Status</th>
-                  <th className="table-header">Action</th>
+                <tr className="border-b border-gray-50">
+                  <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Member</th>
+                  <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Loan Type</th>
+                  <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Amount</th>
+                  <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Net Proceeds</th>
+                  <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Action</th>
                 </tr>
               </thead>
-              <tbody>
-                {treasurerLoans.map((loan: TreasurerLoan) => (
+              <tbody className="divide-y divide-gray-50">
+                {treasurerLoans.map((loan) => (
                   <tr key={loan.row} className="hover:bg-gray-50 transition-colors">
-                    <td className="table-cell">{loan.firstName} {loan.lastName}</td>
-                    <td className="table-cell">{normLoanType(loan.loan_type)}</td>
-                    <td className="table-cell font-semibold">{formatPeso(loan.amount)}</td>
-                    <td className="table-cell font-semibold text-green-700">{formatPeso(loan.net_proceeds)}</td>
-                    <td className="table-cell">
-                      <span className={`badge ${loan.status.includes('Released') ? 'badge-paid' : 'badge-active'}`}>{loan.status}</span>
-                    </td>
-                    <td className="table-cell">
+                    <td className="px-4 py-3 text-sm">{loan.first_name} {loan.last_name}</td>
+                    <td className="px-4 py-3 text-sm">{normLoanType(loan.loan_type)}</td>
+                    <td className="px-4 py-3 text-sm font-semibold">{formatPeso(loan.amount)}</td>
+                    <td className="px-4 py-3 text-sm font-semibold text-green-700">{formatPeso(loan.net_proceeds)}</td>
+                    <td className="px-4 py-3"><Badge status={loan.status} /></td>
+                    <td className="px-4 py-3">
                       <button
                         onClick={() => handleRelease(loan.row, loan)}
                         disabled={loan.status === 'Released'}
@@ -424,13 +397,12 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Settings Tab */}
       {tab === 'settings' && (
-        <div className="card">
+        <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
           <h3 className="font-semibold text-coop-dark mb-4">System Settings</h3>
           <form onSubmit={(e) => { e.preventDefault(); handleSaveSettings(); }} className="space-y-4 max-w-md">
             <div>
-              <label className="label-text">School Year</label>
+              <label className="block text-xs font-semibold text-coop-dark mb-1">School Year</label>
               <input
                 name="schoolYear"
                 type="text"
@@ -440,7 +412,7 @@ export default function AdminDashboard() {
               />
             </div>
             <div>
-              <label className="label-text">Admin Password</label>
+              <label className="block text-xs font-semibold text-coop-dark mb-1">Admin Password</label>
               <input
                 name="adminPassword"
                 type="password"
@@ -454,5 +426,25 @@ export default function AdminDashboard() {
         </div>
       )}
     </div>
+  );
+}
+
+// Badge component used locally
+function Badge({ status }: { status: string }) {
+  const variants: Record<string, string> = {
+    'Pending': 'bg-yellow-100 text-yellow-700',
+    'Confirmed': 'bg-green-100 text-green-700',
+    'Rejected': 'bg-red-100 text-red-700',
+    'Under Review': 'bg-orange-100 text-orange-700',
+    'Active': 'bg-blue-100 text-blue-700',
+    'Paid': 'bg-emerald-100 text-emerald-700',
+    'Approved': 'bg-green-100 text-green-700',
+    'Released': 'bg-emerald-100 text-emerald-700',
+    'Approved (In Settlement)': 'bg-blue-100 text-blue-700',
+  };
+  return (
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-tighter ${variants[status] || 'bg-gray-100 text-gray-600'}`}>
+      {status}
+    </span>
   );
 }

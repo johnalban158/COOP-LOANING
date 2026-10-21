@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { completeProfileSetup, requestPasswordReset } from '../lib/tauri';
-import { formatPeso } from '../lib/utils';
 import { User, Mail, Lock, Phone, ArrowLeft } from 'lucide-react';
 
 export default function ProfileSetup() {
@@ -11,7 +10,7 @@ export default function ProfileSetup() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  const handleProfileSetup = async (e: React.FormEvent) => {
+  const handleProfileSetup = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const memberId = formData.get('memberId') as string;
@@ -39,7 +38,7 @@ export default function ProfileSetup() {
     }
   };
 
-  const handleResetRequest = async (e: React.FormEvent) => {
+  const handleResetRequest = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const email = formData.get('email') as string;

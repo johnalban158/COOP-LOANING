@@ -8,13 +8,11 @@ import {
   ShieldAlert,
   Package,
   Mail,
-  BarChart3,
   Settings as SettingsIcon,
-  AlertTriangle,
   LogOut,
   Menu,
   X,
-  Layout,
+  LayoutTemplate,
 } from 'lucide-react';
 import {
   DashboardPage,
@@ -95,7 +93,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <div className="p-6 border-b border-gray-700">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-8 h-8 bg-coop-light rounded-lg flex items-center justify-center">
-                <Layout className="w-5 h-5 text-coop-dark" />
+                <LayoutTemplate className="w-5 h-5 text-coop-dark" />
               </div>
               <div>
                 <h1 className="font-bold text-xl tracking-tight">CAMPUS<span className="text-coop-light">COOP</span></h1>
@@ -159,7 +157,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               </div>
               <div className="flex items-center gap-4">
                 <div className="hidden md:flex items-center gap-2 text-sm text-gray-600">
-                  <Layout className="w-4 h-4 text-gray-400" />
+                  <LayoutTemplate className="w-4 h-4 text-gray-400" />
                   <span>AY 2025-2026</span>
                 </div>
                 <div className="flex items-center gap-3 pl-4 border-l border-gray-200">
